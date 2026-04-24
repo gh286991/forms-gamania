@@ -61,6 +61,7 @@ type TemplateCopyResult = {
 
 type StructuredDocConfig = {
   clearTemplate?: boolean;
+  markdownRenderMode?: "raw" | "rich";
   replaceText?: Record<string, string>;
   keyValues?: Record<string, string>;
   appendUnknownKeyValues?: boolean;
@@ -71,7 +72,7 @@ type StructuredDocConfig = {
   appendParagraphs?: string[];
   bullets?: string[];
   removeMarkers?: string[];
-  markdownReplace?: Record<string, string>;
+  markdownReplace?: Record<string, string | string[]>;
 };
 
 type ApplyConfigReport = {
@@ -739,12 +740,19 @@ function applyStructuredConfigToDoc(docId: string, config: StructuredDocConfig):
   }
 
   if (config.markdownReplace) {
-    for (const [placeholder, markdownText] of Object.entries(config.markdownReplace)) {
-      if (!placeholder || !markdownText) {
+    const markdownRenderMode: "raw" | "rich" = config.markdownRenderMode === "rich" ? "rich" : "raw";
+    for (const [placeholder, rawValue] of Object.entries(config.markdownReplace)) {
+      if (!placeholder || !rawValue) {
+        continue;
+      }
+      const combined = Array.isArray(rawValue)
+        ? rawValue.filter((v) => v).join("\n---\n")
+        : rawValue;
+      if (!combined) {
         continue;
       }
       for (const b of allBodies) {
-        if (insertMarkdownAtPlaceholder(b, placeholder, markdownText)) {
+        if (insertMarkdownAtPlaceholder(b, placeholder, combined, markdownRenderMode)) {
           report.replacedMarkdown.push(placeholder);
           break;
         }
@@ -1177,7 +1185,8 @@ function getAllDocBodies(doc: GoogleAppsScript.Document.Document): GoogleAppsScr
 function insertMarkdownAtPlaceholder(
   body: GoogleAppsScript.Document.Body,
   placeholder: string,
-  markdown: string
+  markdown: string,
+  renderMode: "raw" | "rich"
 ): boolean {
   const found = body.findText(escapeRegexForReplace(placeholder));
   if (!found) {
@@ -1185,12 +1194,339 @@ function insertMarkdownAtPlaceholder(
   }
   const parentElement = found.getElement().getParent();
   const insertIndex = body.getChildIndex(parentElement);
-  parentElement.asParagraph().setText("");
-  renderMarkdownToBody(body, markdown, insertIndex);
+  renderMarkdownToBody(body, markdown, insertIndex, renderMode);
+  try {
+    parentElement.removeFromParent();
+  } catch (_e) {
+    try {
+      parentElement.asParagraph().setText(" ");
+    } catch (_e2) { /* last resort: leave a space */ }
+  }
   return true;
 }
 
+function splitMarkdownIntoCards(markdown: string): string[] {
+  const lines = markdown.split("\n");
+  const cards: string[] = [];
+  let current: string[] = [];
+  let inCodeBlock = false;
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+    }
+    if (!inCodeBlock && line.trim() === "---") {
+      cards.push(current.join("\n"));
+      current = [];
+      continue;
+    }
+    current.push(line);
+  }
+  if (current.length > 0) {
+    cards.push(current.join("\n"));
+  }
+  return cards.filter((c) => c.trim());
+}
+
+function extractFirstHeadingTitle(markdown: string): string {
+  const lines = markdown.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) {
+      return trimmed.slice(2).trim();
+    }
+    return "";
+  }
+  return "";
+}
+
+function renderRawMarkdownToCell(cell: GoogleAppsScript.Document.TableCell, markdown: string): void {
+  const lines = markdown.split("\n");
+  let wrote = false;
+
+  for (const line of lines) {
+    const text = line.length > 0 ? line : " ";
+    const para = cell.appendParagraph(text);
+    const textEl = para.editAsText();
+    textEl.setFontSize(11);
+    textEl.setFontFamily("Arial");
+    wrote = true;
+  }
+
+  if (wrote) {
+    try {
+      const first = cell.getChild(0);
+      const firstText = first.asParagraph().getText();
+      if (firstText === " " || firstText === "") {
+        first.removeFromParent();
+      }
+    } catch (_e) {
+      // keep default paragraph when removal fails
+    }
+  }
+}
+
+function renderRawMarkdownLines(
+  body: GoogleAppsScript.Document.Body,
+  markdown: string,
+  startIndex: number
+): void {
+  const lines = markdown.split("\n");
+  let idx = startIndex;
+
+  for (const line of lines) {
+    const text = line.length > 0 ? line : " ";
+    const para = body.insertParagraph(idx, text);
+    const textEl = para.editAsText();
+    textEl.setFontSize(11);
+    textEl.setFontFamily("Arial");
+    idx += 1;
+  }
+}
+
+function renderRawMarkdownCards(
+  body: GoogleAppsScript.Document.Body,
+  cards: string[],
+  startIndex: number
+): void {
+  let idx = startIndex;
+  for (let i = 0; i < cards.length; i += 1) {
+    const cardMarkdown = cards[i].trim();
+    const title = extractFirstHeadingTitle(cardMarkdown);
+
+    if (title) {
+      const table = body.insertTable(idx, [[title], [" "]]);
+      table.setBorderColor("#000000");
+      table.setBorderWidth(1);
+
+      const titleCell = table.getRow(0).getCell(0);
+      titleCell.setBackgroundColor("#000000");
+      titleCell.setPaddingTop(6);
+      titleCell.setPaddingBottom(6);
+      titleCell.setPaddingLeft(10);
+      titleCell.setPaddingRight(10);
+      const titleText = titleCell.editAsText();
+      titleText.setForegroundColor("#ffffff");
+      titleText.setBold(true);
+      titleText.setFontSize(13);
+      titleCell.getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+      const contentCell = table.getRow(1).getCell(0);
+      contentCell.setPaddingTop(8);
+      contentCell.setPaddingBottom(8);
+      contentCell.setPaddingLeft(10);
+      contentCell.setPaddingRight(10);
+      renderRawMarkdownToCell(contentCell, cardMarkdown);
+    } else {
+      const table = body.insertTable(idx, [[" "]]);
+      table.setBorderColor("#000000");
+      table.setBorderWidth(1);
+      const cell = table.getRow(0).getCell(0);
+      cell.setPaddingTop(8);
+      cell.setPaddingBottom(8);
+      cell.setPaddingLeft(10);
+      cell.setPaddingRight(10);
+      renderRawMarkdownToCell(cell, cardMarkdown);
+    }
+
+    idx += 1;
+    if (i < cards.length - 1) {
+      const spacer = body.insertParagraph(idx, " ");
+      spacer.editAsText().setFontSize(4);
+      idx += 1;
+    }
+  }
+}
+
 function renderMarkdownToBody(
+  body: GoogleAppsScript.Document.Body,
+  markdown: string,
+  startIndex: number,
+  renderMode: "raw" | "rich"
+): void {
+  const cards = splitMarkdownIntoCards(markdown);
+
+  if (renderMode === "raw") {
+    if (cards.length > 1) {
+      renderRawMarkdownCards(body, cards, startIndex);
+      return;
+    }
+    renderRawMarkdownLines(body, markdown, startIndex);
+    return;
+  }
+
+  if (cards.length > 1) {
+    renderMarkdownCards(body, cards, startIndex);
+    return;
+  }
+
+  renderMarkdownLines(body, markdown, startIndex);
+}
+
+function extractCardTitle(markdown: string): { title: string; content: string } {
+  const lines = markdown.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) {
+      return { title: trimmed.slice(2).trim(), content: lines.slice(i + 1).join("\n") };
+    }
+    break;
+  }
+  return { title: "", content: markdown };
+}
+
+function renderMarkdownCards(
+  body: GoogleAppsScript.Document.Body,
+  cards: string[],
+  startIndex: number
+): void {
+  let idx = startIndex;
+  for (let i = 0; i < cards.length; i++) {
+    const { title, content } = extractCardTitle(cards[i].trim());
+
+    if (title) {
+      const table = body.insertTable(idx, [[title], [" "]]);
+      table.setBorderColor("#000000");
+      table.setBorderWidth(1);
+
+      const titleCell = table.getRow(0).getCell(0);
+      titleCell.setBackgroundColor("#000000");
+      titleCell.setPaddingTop(6);
+      titleCell.setPaddingBottom(6);
+      titleCell.setPaddingLeft(10);
+      titleCell.setPaddingRight(10);
+      const titleText = titleCell.editAsText();
+      titleText.setForegroundColor("#ffffff");
+      titleText.setBold(true);
+      titleText.setFontSize(13);
+      titleCell.getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+      const contentCell = table.getRow(1).getCell(0);
+      contentCell.setPaddingTop(8);
+      contentCell.setPaddingBottom(8);
+      contentCell.setPaddingLeft(10);
+      contentCell.setPaddingRight(10);
+      renderMarkdownToCell(contentCell, content);
+    } else {
+      const table = body.insertTable(idx, [[" "]]);
+      table.setBorderColor("#000000");
+      table.setBorderWidth(1);
+      const cell = table.getRow(0).getCell(0);
+      cell.setPaddingTop(8);
+      cell.setPaddingBottom(8);
+      cell.setPaddingLeft(10);
+      cell.setPaddingRight(10);
+      renderMarkdownToCell(cell, cards[i].trim());
+    }
+
+    idx++;
+    if (i < cards.length - 1) {
+      const spacer = body.insertParagraph(idx, " ");
+      spacer.editAsText().setFontSize(4);
+      idx++;
+    }
+  }
+}
+
+function renderMarkdownToCell(
+  cell: GoogleAppsScript.Document.TableCell,
+  markdown: string
+): void {
+  const lines = markdown.split("\n");
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
+  let elementCount = 0;
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (inCodeBlock) {
+        for (const codeLine of codeLines) {
+          const para = cell.appendParagraph(codeLine || " ");
+          para.editAsText().setFontFamily("Courier New");
+          para.editAsText().setFontSize(10);
+          para.editAsText().setBackgroundColor("#f5f5f5");
+          elementCount++;
+        }
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (line.startsWith("#### ")) {
+      const text = line.slice(5) || " ";
+      const para = cell.appendParagraph(text);
+      applyInlineMarkdown(para.editAsText(), text);
+      applyCellHeading(para, 11);
+    } else if (line.startsWith("### ")) {
+      const text = line.slice(4) || " ";
+      const para = cell.appendParagraph(text);
+      applyInlineMarkdown(para.editAsText(), text);
+      applyCellHeading(para, 13);
+    } else if (line.startsWith("## ")) {
+      const text = line.slice(3) || " ";
+      const para = cell.appendParagraph(text);
+      applyInlineMarkdown(para.editAsText(), text);
+      applyCellHeading(para, 16);
+    } else if (line.startsWith("# ")) {
+      const text = line.slice(2) || " ";
+      const para = cell.appendParagraph(text);
+      applyInlineMarkdown(para.editAsText(), text);
+      applyCellHeading(para, 20);
+    } else if (/^[-*] /.test(line)) {
+      const content = line.slice(2);
+      const item = (cell as unknown as { appendListItem(t: string): GoogleAppsScript.Document.ListItem }).appendListItem(content || " ");
+      item.setGlyphType(DocumentApp.GlyphType.BULLET);
+      applyInlineMarkdown(item.editAsText(), content);
+    } else if (/^\d+\. /.test(line)) {
+      const content = line.replace(/^\d+\. /, "");
+      const item = (cell as unknown as { appendListItem(t: string): GoogleAppsScript.Document.ListItem }).appendListItem(content || " ");
+      item.setGlyphType(DocumentApp.GlyphType.NUMBER);
+      applyInlineMarkdown(item.editAsText(), content);
+    } else {
+      const text = line || " ";
+      const para = cell.appendParagraph(text);
+      applyInlineMarkdown(para.editAsText(), text);
+    }
+    elementCount++;
+  }
+
+  if (elementCount > 0) {
+    try {
+      const first = cell.getChild(0);
+      const firstText = first.asParagraph().getText();
+      if (firstText === " " || firstText === "") {
+        first.removeFromParent();
+      }
+    } catch (_e) { /* keep default paragraph if removal fails */ }
+  }
+}
+
+function applyCellHeading(para: GoogleAppsScript.Document.Paragraph, fontSize: number): void {
+  const et = para.editAsText();
+  const len = et.getText().length;
+  if (len > 0) {
+    et.setBold(0, len - 1, true);
+    et.setFontSize(0, len - 1, fontSize);
+  }
+}
+
+function renderMarkdownLines(
   body: GoogleAppsScript.Document.Body,
   markdown: string,
   startIndex: number
@@ -1244,8 +1580,9 @@ function renderMarkdownToBody(
       item.setGlyphType(DocumentApp.GlyphType.NUMBER);
       applyInlineMarkdown(item.editAsText(), content);
     } else {
-      const para = body.insertParagraph(idx, line);
-      applyInlineMarkdown(para.editAsText(), line);
+      const text = line || " ";
+      const para = body.insertParagraph(idx, text);
+      applyInlineMarkdown(para.editAsText(), text);
     }
 
     idx++;
@@ -1294,7 +1631,12 @@ function applyInlineMarkdown(textEl: GoogleAppsScript.Document.Text, line: strin
   }
 
   const plainText = segments.map((s) => s.text).join("");
+  if (!plainText) {
+    return;
+  }
   textEl.setText(plainText);
+  textEl.setFontSize(11);
+  textEl.setFontFamily("Arial");
 
   let pos = 0;
   for (const seg of segments) {

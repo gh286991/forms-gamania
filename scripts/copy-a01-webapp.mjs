@@ -73,6 +73,34 @@ function loadClaspToken() {
   return token;
 }
 
+function resolveMarkdownFiles(config, configDir) {
+  if (!config.markdownFiles || typeof config.markdownFiles !== "object") {
+    return config;
+  }
+  const result = { ...config };
+  result.markdownReplace = result.markdownReplace || {};
+
+  for (const [placeholder, files] of Object.entries(config.markdownFiles)) {
+    const fileArray = Array.isArray(files) ? files : [files];
+    const contents = [];
+    for (const f of fileArray) {
+      const resolved = path.resolve(configDir, f);
+      if (!fs.existsSync(resolved)) {
+        console.error(`markdownFiles: 找不到 ${resolved}`);
+        continue;
+      }
+      console.log(`markdownFiles: 載入 ${resolved}`);
+      contents.push(fs.readFileSync(resolved, "utf8"));
+    }
+    if (contents.length > 0) {
+      result.markdownReplace[placeholder] = contents;
+    }
+  }
+
+  delete result.markdownFiles;
+  return result;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const token = loadClaspToken();
@@ -82,7 +110,8 @@ async function main() {
   if (options.configPath && fs.existsSync(options.configPath)) {
     console.log(`A01 帶入設定：${options.configPath}`);
     const rawConfig = fs.readFileSync(options.configPath, "utf8");
-    const config = JSON.parse(rawConfig);
+    const configDir = path.dirname(path.resolve(options.configPath));
+    const config = resolveMarkdownFiles(JSON.parse(rawConfig), configDir);
 
     response = await fetch(url, {
       method: "POST",
