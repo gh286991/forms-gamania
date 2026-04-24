@@ -1,0 +1,39 @@
+{
+  "clearTemplate": false,
+  "replaceText": {
+    "{{日期}}": "2026/04/24",
+    "{{需求產品}}": "寶可夢",
+    "{{產品窗口}}": "Tom",
+    "{{開發負責人}}": "Tom",
+    "{{版本編號}}": "V1.0",
+    "{{開發人員}}": "Tom",
+    "{{版本描述}}": "初版",
+    "{{項目}}": "A01 文件自動化填表",
+    "{{JIRA}}": "GXY-1234",
+    "{{說明}}": "需求說明內容",
+    "{{經辦}}": "Tom",
+    "{{測試人員確認}}": "Tom",
+    "{{產品負責人}}": "Tom",
+    "{{部門主管}}": "Tom",
+    "{{新增功能}}": "■",
+    "{{修改功能}}": "□",
+    "{{API}}": "■",
+    "{{SDK}}": "□",
+    "{{後台}}": "■",
+    "{{數據中心}}": "■",
+    "{{資料庫}}": "□",
+    "{{其他}}": "□",
+    "{{無涉及機敏資訊}}": "■",
+    "{{涉及部分資訊}}": "□",
+    "{{涉及部分資訊說明}}": "",
+    "{{按照既有資安架構}}": "■",
+    "{{額外套用條件}}": "□",
+    "{{額外套用條件說明}}": ""
+  },
+  "keyValues": {},
+  "appendUnknownKeyValues": false,
+  "removeMarkers": [],
+  "markdownReplace": {
+    "{{系統規格書}}": "# 系統規格書\n\n## 1. 功能概述\n\n本需求實作 **A01 開發需求單自動化填表**功能，透過 Google Apps Script 與 Drive API 複製範本並填入指定內容。\n\n## 2. 技術架構\n\n### 2.1 使用技術\n\n- **語言**：TypeScript\n- **執行環境**：Google Apps Script\n- **部署工具**：clasp CLI\n\n### 2.2 API 介面\n\n```typescript\ninterface CopyRequest {\n  action: 'copy_a01' | 'copy_template';\n  config: StructuredDocConfig;\n}\n```\n\n## 3. 執行流程\n\n1. 讀取 `a01-content.sample.json` 設定\n2. 呼叫 WebApp `POST /exec`\n3. 複製模板至目標資料夾\n4. 替換所有 `{{佔位符}}` 內容\n\n## 4. 注意事項\n\n- 需要 Google Drive **進階服務** 權限\n- Rate limit：每分鐘最多 `60` 次呼叫\n- checkbox 值使用 `■`（勾選）或 `□`（未勾選）"
+  }
+}

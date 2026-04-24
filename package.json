@@ -1,0 +1,38 @@
+{
+  "name": "appscript",
+  "version": "1.0.0",
+  "description": "Google Apps Script TypeScript sample using clasp.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "local": "tsx src/local.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "clasp": "clasp",
+    "login": "clasp login",
+    "create": "npm run build && clasp create --title \"TS Clasp Sample\" --type standalone --rootDir dist",
+    "push": "npm run build && clasp push --force",
+    "open": "clasp open-script",
+    "open:web": "clasp open-web-app",
+    "deploy": "npm run build && node scripts/deploy.mjs",
+    "a01:all": "npm run build && npm run push && npm run deploy && npm run copy:a01",
+    "list:drive:exec": "node scripts/list-drive.mjs",
+    "list:drive": "node scripts/list-drive-webapp.mjs",
+    "copy:a01": "node scripts/copy-a01-webapp.mjs",
+    "inspect:a01": "node scripts/inspect-a01-webapp.mjs"
+  },
+  "keywords": [
+    "google-apps-script",
+    "clasp",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@google/clasp": "^3.3.0",
+    "@types/google-apps-script": "^2.0.8",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
