@@ -3,20 +3,22 @@ import { loadClaspToken, resolveWebappUrl } from "./webapp-utils.mjs";
 function parseArgs(argv) {
   const options = {
     webappUrl: process.env.WEBAPP_URL || resolveWebappUrl(),
-    path: "",
-    folderId: ""
+    form: "a01",
+    template: ""
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if ((arg === "--path" || arg === "-p") && i + 1 < argv.length) {
-      options.path = argv[++i];
-    } else if ((arg === "--folderId" || arg === "-f") && i + 1 < argv.length) {
-      options.folderId = argv[++i];
-    } else if (arg === "--webappUrl" && i + 1 < argv.length) {
+    if (arg === "--webappUrl" && i + 1 < argv.length) {
       options.webappUrl = argv[++i];
+    } else if ((arg === "--form" || arg === "-f") && i + 1 < argv.length) {
+      options.form = argv[++i].toLowerCase();
+    } else if ((arg === "--template" || arg === "-t") && i + 1 < argv.length) {
+      options.template = argv[++i];
     }
   }
+
+  console.log(`使用 Web App URL：${options.webappUrl}`);
 
   return options;
 }
@@ -27,11 +29,12 @@ async function main() {
   const url = new URL(options.webappUrl);
 
   url.searchParams.set("format", "json");
-  if (options.path) {
-    url.searchParams.set("path", options.path);
-  }
-  if (options.folderId) {
-    url.searchParams.set("folderId", options.folderId);
+  if (options.template) {
+    url.searchParams.set("action", "inspect_template");
+    url.searchParams.set("template", options.template);
+  } else {
+    url.searchParams.set("action", "inspect_form");
+    url.searchParams.set("form", options.form);
   }
 
   const response = await fetch(url, {

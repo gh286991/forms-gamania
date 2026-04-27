@@ -1,5 +1,46 @@
+# --- Dependency & build artifacts ---
 node_modules/
 dist/
+build/
+out/
+coverage/
+.next/
+.nuxt/
+tmp/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Google Apps Script / clasp ---
 .clasp.json
 .clasprc.json
-npm-debug.log*
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Environment & local config ---
+.env
+.env.*
+!.env.example
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Editors / IDE ---
+.vscode/
+.idea/
+*.iml
+*.suo
+*.user
+
+# --- Archives / temporary ---
+*.tgz
+*.zip
+
+# --- Misc ---
+node_modules/.cache/
