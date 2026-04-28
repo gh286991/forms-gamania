@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "clasp": "clasp",
     "login": "clasp login",
@@ -19,6 +20,13 @@
     "inspect:a01": "node scripts/inspect-form-webapp.mjs --form a01",
     "form:a01": "npm run build && npm run push && npm run deploy && npm run copy:a01"
   },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "postcss": "^8.5.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.2.4"
+  },
   "keywords": [
     "google-apps-script",
     "clasp",
@@ -29,7 +37,10 @@
   "devDependencies": {
     "@google/clasp": "^3.3.0",
     "@types/google-apps-script": "^2.0.8",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
     "esbuild": "^0.28.0",
+    "sass": "^1.99.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

@@ -42,5 +42,10 @@ Thumbs.db
 *.tgz
 *.zip
 
+# --- AI tools ---
+.cursor/
+.claude/
+.agents/
+
 # --- Misc ---
 node_modules/.cache/

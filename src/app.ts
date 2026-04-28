@@ -8,7 +8,6 @@ import type {
 import { FORM_REGISTRY, DEFAULT_DRIVE_PATH, MAX_FILES } from "./config";
 import { resolveTargetFolder, listCurrentLevelEntries, extractDriveFileId, getDriveApi, buildDriveFileUrl } from "./drive";
 import { hasStructuredDocConfig, applyStructuredConfigToDoc, collectBodyLines, extractPlaceholdersFromLine, extractLabelCandidate, collectTableKeyCandidates } from "./doc";
-import { renderDrivePage } from "./html";
 
 export function copyFormTemplate(formCode: string, config?: StructuredDocConfig): string {
   const entry = FORM_REGISTRY[formCode.toLowerCase()];
@@ -140,13 +139,6 @@ export function inspectTemplateFields(templateDocIdOrUrl: string): TemplateInspe
 
 export function authorizeDriveAccess(): string {
   try {
-    const authInfo = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
-    if (authInfo.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED) {
-      const authUrl = authInfo.getAuthorizationUrl();
-      return authUrl
-        ? `需要先完成授權，請開啟：${authUrl}`
-        : "需要先完成授權，請在編輯器重新執行並同意權限。";
-    }
     const drive = getDriveApi();
     drive.Files.list({
       maxResults: 1,
@@ -181,11 +173,34 @@ export function listFolderItemsCli(pathInput?: string, folderIdInput?: string): 
   }, null, 2);
 }
 
+type ReactPageContext = {
+  defaultView: "selector" | "form" | "drive";
+  defaultForm?: string;
+  defaultPath?: string;
+  defaultFolderId?: string;
+};
+
+function renderReactHtmlPage(
+  fileName: "form-selector" | "form-a01",
+  title: string,
+  context: ReactPageContext
+): GoogleAppsScript.HTML.HtmlOutput {
+  const template = HtmlService.createTemplateFromFile(fileName) as unknown as {
+    appContext: string;
+  } & GoogleAppsScript.HTML.HtmlTemplate;
+  template.appContext = JSON.stringify({
+    ...context,
+    defaultForm: context.defaultForm || ""
+  }).replace(/<\//g, "<\\/");
+  return template.evaluate().setTitle(title);
+}
+
 export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Content.TextOutput | GoogleAppsScript.HTML.HtmlOutput {
   const pathInput = (e?.parameter?.path || DEFAULT_DRIVE_PATH).trim();
   const folderIdInput = (e?.parameter?.folderId || "").trim();
   const jsonMode = (e?.parameter?.format || "").toLowerCase() === "json";
   const action = (e?.parameter?.action || "").toLowerCase();
+  const formCodeParam = (e?.parameter?.form || "").toLowerCase();
 
   try {
     if (jsonMode && action === "copy_form") {
@@ -213,39 +228,7 @@ export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Conte
       return ContentService.createTextOutput(JSON.stringify(result, null, 2)).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Form selector (default) and form pages
-    if (!action || action === "form") {
-      const formCode = (e?.parameter?.form || "").toLowerCase();
-      const pageTitle = formCode && FORM_REGISTRY[formCode]
-        ? formCode.toUpperCase() + " 表單"
-        : "建立表單文件";
-      return HtmlService.createHtmlOutputFromFile("form-selector").setTitle(pageTitle);
-    }
-
-    // Drive browser (explicit)
-    if (action === "drive" || e?.parameter?.path || folderIdInput) {
-      const targetFolder = resolveTargetFolder(pathInput, folderIdInput);
-      const list = listCurrentLevelEntries(targetFolder.folderId, MAX_FILES);
-
-      if (jsonMode) {
-        return ContentService.createTextOutput(JSON.stringify({
-          ok: true,
-          inputPath: pathInput,
-          normalizedPath: targetFolder.normalizedPath,
-          folderId: targetFolder.folderId,
-          ambiguousCount: targetFolder.ambiguousCount,
-          truncated: list.truncated,
-          itemCount: list.rows.length,
-          items: list.rows
-        }, null, 2)).setMimeType(ContentService.MimeType.JSON);
-      }
-
-      return HtmlService
-        .createHtmlOutput(renderDrivePage({ inputPath: pathInput, normalizedPath: targetFolder.normalizedPath, folderId: targetFolder.folderId, rows: list.rows, ambiguousCount: targetFolder.ambiguousCount, truncated: list.truncated, message: "" }))
-        .setTitle("Drive File Browser");
-    }
-
-    // JSON-only drive query with no explicit action
+    // JSON-only drive query with no explicit action (including path/folderId shortcut)
     if (jsonMode) {
       const targetFolder = resolveTargetFolder(pathInput, folderIdInput);
       const list = listCurrentLevelEntries(targetFolder.folderId, MAX_FILES);
@@ -256,15 +239,47 @@ export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Conte
       }, null, 2)).setMimeType(ContentService.MimeType.JSON);
     }
 
-    return HtmlService.createHtmlOutputFromFile("form-selector").setTitle("建立表單文件");
+    const shouldRenderDrive = action === "drive" || !!e?.parameter?.path || !!folderIdInput;
+    if (action === "form" || (!action && FORM_REGISTRY[formCodeParam])) {
+      if (formCodeParam === "a01") {
+        return renderReactHtmlPage("form-a01", "A01 開發需求單", {
+          defaultView: "form",
+          defaultForm: "a01",
+          defaultPath: pathInput,
+          defaultFolderId: folderIdInput
+        });
+      }
+      return renderReactHtmlPage("form-selector", "建立表單文件", {
+        defaultView: "selector",
+        defaultForm: formCodeParam,
+        defaultPath: pathInput,
+        defaultFolderId: folderIdInput
+      });
+    }
+
+    if (shouldRenderDrive) {
+      return renderReactHtmlPage("form-selector", "Drive File Browser", {
+        defaultView: "drive",
+        defaultPath: pathInput,
+        defaultFolderId: folderIdInput
+      });
+    }
+
+    return renderReactHtmlPage("form-selector", "建立表單文件", {
+      defaultView: "selector",
+      defaultPath: pathInput,
+      defaultFolderId: folderIdInput
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (jsonMode) {
       return ContentService.createTextOutput(JSON.stringify({ ok: false, inputPath: pathInput, folderId: folderIdInput, error: message }, null, 2)).setMimeType(ContentService.MimeType.JSON);
     }
-    return HtmlService
-      .createHtmlOutput(renderDrivePage({ inputPath: pathInput, normalizedPath: "", folderId: folderIdInput, rows: [], ambiguousCount: 0, truncated: false, message }))
-      .setTitle("Drive File Browser");
+    return renderReactHtmlPage("form-selector", "建立表單文件", {
+      defaultView: "selector",
+      defaultPath: pathInput,
+      defaultFolderId: folderIdInput
+    });
   }
 }
 

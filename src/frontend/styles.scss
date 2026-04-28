@@ -1,0 +1,395 @@
+$bg: #f0f2f7;
+$panel: #ffffff;
+$line: #d7dce8;
+$text: #1a1d29;
+$muted: #5a6175;
+$accent: #0a66c2;
+$accent-soft: #e9f3ff;
+$warn-bg: #fff8e1;
+$warn-line: #f5d66f;
+$error-bg: #fdecea;
+$error-line: #ef9a9a;
+$success-bg: #e8f5e9;
+$success-line: #66bb6a;
+
+@media screen {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: $bg;
+    color: $text;
+    font-size: 14px;
+  }
+
+  .app-shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  // ─── Auth Bar ───
+  .auth-bar {
+    margin: 0 auto 16px;
+    border: 1px solid $line;
+    background: $accent-soft;
+    color: #154273;
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+
+    &.checking,
+    &.warn,
+    &.error,
+    &.ok {
+      display: flex;
+    }
+
+    &.warn {
+      border-color: $warn-line;
+      background: $warn-bg;
+      color: #6b4f00;
+    }
+
+    &.error {
+      border-color: $error-line;
+      background: $error-bg;
+      color: #c62828;
+    }
+
+    &.ok {
+      border-color: $success-line;
+      background: $success-bg;
+      color: #2e7d32;
+    }
+  }
+
+  .auth-msg {
+    flex: 1 1 300px;
+  }
+
+  .auth-link,
+  .auth-refresh {
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 6px 10px;
+    text-decoration: none;
+    border: 1px solid currentColor;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .auth-link.show {
+    display: inline-block;
+  }
+
+  // ─── Selector View ───
+  .selector-view {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 24px;
+
+    h1 {
+      font-size: 22px;
+      margin: 0 0 6px;
+      color: #1a1d29;
+    }
+  }
+
+  .sub {
+    color: $muted;
+    margin: 0 0 16px;
+    font-size: 14px;
+  }
+
+  .selector-error {
+    margin: 0 0 24px;
+    border: 1px solid $error-line;
+    border-radius: 8px;
+    background: $error-bg;
+    color: #c62828;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: $panel;
+    border: 1px solid $line;
+    border-radius: 10px;
+    padding: 32px 16px;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    user-select: none;
+
+    &:hover {
+      border-color: $accent;
+      box-shadow: 0 4px 16px rgba(10, 102, 194, 0.15);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+
+      .code {
+        color: #9ab0d0;
+      }
+    }
+  }
+
+  .code {
+    font-size: 30px;
+    font-weight: 700;
+    color: $accent;
+    margin-bottom: 10px;
+  }
+
+  .label {
+    font-size: 13px;
+    color: #444;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .badge {
+    margin-top: 8px;
+    font-size: 11px;
+    background: #eef2fa;
+    color: #888;
+    border-radius: 10px;
+    padding: 2px 8px;
+  }
+
+  .drive-quick {
+    margin-top: 16px;
+  }
+
+  // ─── Back Button ───
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    color: $accent;
+    cursor: pointer;
+    font-size: 13px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  // ─── Drive View ───
+  .panel {
+    background: $panel;
+    border: 1px solid $line;
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .form-line {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr auto;
+    gap: 10px;
+    align-items: center;
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid $line;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+  }
+
+  .submit-btn,
+  .ghost-btn {
+    border: 1px solid $accent;
+    background: #fff;
+    color: $accent;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover {
+      opacity: 0.92;
+    }
+  }
+
+  .submit-btn {
+    background: $accent;
+    color: #fff;
+
+    &:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+
+    &.sm {
+      width: 100px;
+    }
+  }
+
+  .meta-line {
+    margin-top: 12px;
+    padding: 10px;
+    background: $accent-soft;
+    color: #154273;
+    border: 1px solid #bfdcff;
+    border-radius: 6px;
+    font-size: 13px;
+    word-break: break-all;
+  }
+
+  .result-box {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+
+    &.warn {
+      background: $error-bg;
+      color: #c62828;
+      border: 1px solid $error-line;
+    }
+  }
+
+  .tableWrap {
+    margin-top: 14px;
+    overflow-x: auto;
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: $panel;
+      border: 1px solid $line;
+      border-radius: 8px;
+      overflow: hidden;
+      min-width: 860px;
+      margin-bottom: 0;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid $line;
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    th {
+      background: #eef2fa;
+      color: #283148;
+      white-space: nowrap;
+    }
+
+    td a {
+      color: $accent;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+
+    .empty {
+      color: $muted;
+      text-align: center;
+      padding: 22px;
+    }
+  }
+
+  // ─── Spec Preview (rendered HTML content) ───
+  .spec-preview {
+    padding: 14px;
+    min-height: 120px;
+    line-height: 1.65;
+    color: #2c3040;
+    word-break: break-word;
+
+    &.empty {
+      color: #8892a6;
+    }
+
+    h1, h2, h3, h4 {
+      margin: 16px 0 8px;
+      line-height: 1.35;
+      color: #1d2333;
+    }
+
+    h1 { font-size: 22px; }
+    h2 { font-size: 19px; }
+    h3 { font-size: 16px; }
+    h4 { font-size: 14px; }
+    p  { margin: 8px 0; }
+
+    ul, ol {
+      margin: 8px 0 8px 20px;
+      padding: 0;
+    }
+
+    li { margin: 4px 0; }
+
+    pre {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: #1e2433;
+      color: #f4f7ff;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: #f1f3f8;
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-size: 12px;
+    }
+
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .selector-view {
+    padding: 0;
+  }
+
+  .form-line {
+    grid-template-columns: 1fr;
+  }
+}

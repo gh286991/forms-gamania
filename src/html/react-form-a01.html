@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A01 開發需求單</title>
+  <!-- REACT_APP_STYLES -->
+</head>
+<body>
+  <div id="app-root"></div>
+  <script id="__ctx__" type="application/json"><?!= appContext ?></script>
+  <script>
+    (function() {
+      try {
+        window.__APP_CONTEXT__ = JSON.parse(document.getElementById('__ctx__').textContent || '{}');
+      } catch(e) {
+        window.__APP_CONTEXT__ = {};
+      }
+    })();
+  </script>
+  <?!= HtmlService.createHtmlOutputFromFile('react-bundle').getContent() ?>
+</body>
+</html>
