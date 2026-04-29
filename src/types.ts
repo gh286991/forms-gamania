@@ -101,6 +101,52 @@ export type CopyRequestPayload = {
   path?: string;
   folderId?: string;
   config?: StructuredDocConfig;
+  a01?: A01ApiPayload;
+};
+
+export type A01VersionRowPayload = {
+  date?: string;
+  code?: string;
+  person?: string;
+  desc?: string;
+};
+
+export type A01ApiPayload = {
+  date?: string;
+  product?: string;
+  productContact?: string;
+  devLead?: string;
+  signDevLead?: string[];
+  item?: string;
+  jira?: string;
+  description?: string;
+  signer?: string[];
+  tester?: string[];
+  productOwner?: string[];
+  manager?: string[];
+  versionRows?: A01VersionRowPayload[];
+  type?: {
+    newFeature?: boolean;
+    modifyFeature?: boolean;
+  };
+  changeArea?: {
+    api?: boolean;
+    sdk?: boolean;
+    backend?: boolean;
+    dataCenter?: boolean;
+    database?: boolean;
+    other?: boolean;
+  };
+  sensitive?: {
+    mode?: "none" | "partial";
+    detail?: string;
+  };
+  security?: {
+    mode?: "existing" | "extra";
+    detail?: string;
+  };
+  specMarkdown?: string | string[];
+  specMarkdownFiles?: string | string[];
 };
 
 export type FormRegistryEntry = {

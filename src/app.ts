@@ -1,4 +1,5 @@
 import type {
+  A01ApiPayload,
   CopyRequestPayload,
   StructuredDocConfig,
   TemplateCopyOptions,
@@ -82,7 +83,9 @@ export function copyTemplateDocToFolder(options: TemplateCopyOptions): TemplateC
 
   const contentConfig = options.contentConfig || {};
   const hasConfig = hasStructuredDocConfig(contentConfig);
-  const applyReport = hasConfig ? applyStructuredConfigToDoc(copied.id, contentConfig) : undefined;
+  if (hasConfig) {
+    applyStructuredConfigToDoc(copied.id, contentConfig);
+  }
 
   return {
     ok: true,
@@ -93,8 +96,7 @@ export function copyTemplateDocToFolder(options: TemplateCopyOptions): TemplateC
     newName: targetName,
     newFileId: copied.id,
     newFileUrl: buildDriveFileUrl(copied),
-    configApplied: hasConfig,
-    applyReport
+    configApplied: hasConfig
   };
 }
 
@@ -334,7 +336,8 @@ export function doPost(e?: GoogleAppsScript.Events.DoPost): GoogleAppsScript.Con
 
     if (action === "copy_form") {
       const formCode = (payload.form || "a01").toLowerCase();
-      return ContentService.createTextOutput(copyFormTemplate(formCode, payload.config)).setMimeType(ContentService.MimeType.JSON);
+      const normalizedConfig = normalizeCopyFormConfig(formCode, payload);
+      return ContentService.createTextOutput(copyFormTemplate(formCode, normalizedConfig)).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (action === "copy_template") {
@@ -374,4 +377,96 @@ function parseCopyPayload(raw: string): CopyRequestPayload {
   try { parsed = JSON.parse(raw); } catch { throw new Error("POST 內容不是合法 JSON。"); }
   if (!parsed || typeof parsed !== "object") throw new Error("POST JSON 格式錯誤。");
   return parsed as CopyRequestPayload;
+}
+
+function normalizeCopyFormConfig(formCode: string, payload: CopyRequestPayload): StructuredDocConfig | undefined {
+  if (payload.config) return payload.config;
+  if (formCode === "a01" && payload.a01) return buildA01StructuredConfig(payload.a01);
+  return undefined;
+}
+
+function buildA01StructuredConfig(input: A01ApiPayload): StructuredDocConfig {
+  const sensitiveMode = input.sensitive?.mode === "partial" ? "partial" : "none";
+  const securityMode = input.security?.mode === "extra" ? "extra" : "existing";
+  const versionRows = input.versionRows && input.versionRows.length > 0
+    ? input.versionRows
+    : [{ date: input.date || "", code: "V1.0", person: input.devLead || "", desc: "初版" }];
+
+  const config: StructuredDocConfig = {
+    replaceText: {
+      "{{日期}}": toSlashDate(input.date),
+      "{{需求產品}}": toText(input.product),
+      "{{產品窗口}}": toText(input.productContact),
+      "{{開發負責人}}": toText(input.devLead),
+      "{{開發負責人S}}": joinLines(input.signDevLead),
+      "{{項目}}": toText(input.item),
+      "{{JIRA}}": toText(input.jira),
+      "{{說明}}": toText(input.description),
+      "{{經辦}}": joinLines(input.signer),
+      "{{測試人員確認}}": joinLines(input.tester),
+      "{{產品負責人}}": joinLines(input.productOwner),
+      "{{部門主管}}": joinLines(input.manager),
+      "{{新增功能}}": boolMark(Boolean(input.type?.newFeature)),
+      "{{修改功能}}": boolMark(Boolean(input.type?.modifyFeature)),
+      "{{API}}": boolMark(Boolean(input.changeArea?.api)),
+      "{{SDK}}": boolMark(Boolean(input.changeArea?.sdk)),
+      "{{後台}}": boolMark(Boolean(input.changeArea?.backend)),
+      "{{數據中心}}": boolMark(Boolean(input.changeArea?.dataCenter)),
+      "{{資料庫}}": boolMark(Boolean(input.changeArea?.database)),
+      "{{其他}}": boolMark(Boolean(input.changeArea?.other)),
+      "{{無涉及機敏資訊}}": boolMark(sensitiveMode === "none"),
+      "{{涉及部分資訊}}": boolMark(sensitiveMode === "partial"),
+      "{{涉及部分資訊說明}}": toText(input.sensitive?.detail),
+      "{{按照既有資安架構}}": boolMark(securityMode === "existing"),
+      "{{額外套用條件}}": boolMark(securityMode === "extra"),
+      "{{額外套用條件說明}}": toText(input.security?.detail)
+    },
+    tableRows: [{
+      marker: "{{版本編號}}",
+      rows: versionRows.map((row) => [
+        toSlashDate(row.date),
+        toText(row.code) || "V1.0",
+        toText(row.person),
+        toText(row.desc) || ""
+      ])
+    }]
+  };
+
+  const specMarkdown = toMarkdown(input.specMarkdown).trim();
+  if (specMarkdown) {
+    config.markdownRenderMode = "rich";
+    config.markdownReplace = { "{{系統規格書}}": specMarkdown };
+  }
+
+  return config;
+}
+
+function toText(value: unknown): string {
+  return value == null ? "" : String(value);
+}
+
+function toSlashDate(value: unknown): string {
+  return toText(value).trim().replace(/-/g, "/");
+}
+
+function joinLines(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((entry) => toText(entry).trim())
+    .filter((entry) => entry.length > 0)
+    .join("\n");
+}
+
+function boolMark(enabled: boolean): string {
+  return enabled ? "⬛" : "⬚";
+}
+
+function toMarkdown(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => toText(entry).trim())
+      .filter((entry) => entry.length > 0)
+      .join("\n\n---\n\n");
+  }
+  return toText(value);
 }

@@ -24,26 +24,79 @@ Body:
 {
   "action": "copy_form",
   "form": "a01",
-  "config": {
-    "replaceText": {
-      "{{日期}}": "2026/04/24",
-      "{{需求產品}}": "寶可夢",
-      "{{產品窗口}}": "王小明",
-      "{{開發負責人}}": "Tom",
-      "{{版本編號}}": "V1.0",
-      "{{開發人員}}": "Tom",
-      "{{版本描述}}": "初版",
-      "{{項目}}": "API 測試建立 A01",
-      "{{JIRA}}": "GXY-1234",
-      "{{說明}}": "這是透過 Web App API 建立的測試表單",
-      "{{經辦}}": "王小明",
-      "{{測試人員確認}}": "王小明",
-      "{{產品負責人}}": "王小明",
-      "{{部門主管}}": "王小明"
-    }
+  "a01": {
+    "date": "2026-04-24",
+    "product": "寶可夢",
+    "productContact": "王小明",
+    "devLead": "Tom",
+    "signDevLead": ["Tom"],
+    "item": "API 測試建立 A01",
+    "jira": "GXY-1234",
+    "description": "這是透過 Web App API 建立的測試表單",
+    "signer": ["王小明", "陳小華"],
+    "tester": ["王小明", "陳小華"],
+    "productOwner": ["王小明", "陳小華"],
+    "manager": ["王小明", "陳小華"],
+    "type": {
+      "newFeature": true,
+      "modifyFeature": false
+    },
+    "changeArea": {
+      "api": true,
+      "sdk": false,
+      "backend": true,
+      "dataCenter": false,
+      "database": false,
+      "other": false
+    },
+    "sensitive": {
+      "mode": "none",
+      "detail": ""
+    },
+    "security": {
+      "mode": "existing",
+      "detail": ""
+    },
+    "versionRows": [
+      {
+        "date": "2026-04-24",
+        "code": "V1.0",
+        "person": "Tom",
+        "desc": "初版"
+      }
+    ],
+    "specMarkdown": "# 系統規格書\n\n這裡可放 Markdown 內容。"
   }
 }
 ```
+
+伺服器會自動把 `a01` 欄位轉成內部 `config`（placeholder）格式，因此 API 使用者不需要直接維護 `{{...}}` 佔位符。
+
+主要欄位對應：
+- `versionRows`：可一次傳多筆版本紀錄
+- `type` / `changeArea`：布林值會自動轉成文件中的勾選符號
+- `signer` / `tester` / `productOwner` / `manager`：陣列會自動轉成多行文字
+- `specMarkdown`：有值時會附加在「系統規格書」段落
+
+若你已經有舊的 `config.replaceText` payload，也仍可繼續使用。
+
+### 多個 MD 範本
+
+如果你是用 `scripts/copy-form-webapp.mjs --config` 載入本機 JSON 檔，`a01` payload 可直接指定多個 md 檔案：
+
+```json
+{
+  "a01": {
+    "specMarkdownFiles": [
+      "./templates/spec-overview.md",
+      "./templates/spec-api.md",
+      "./templates/spec-test.md"
+    ]
+  }
+}
+```
+
+腳本會依順序讀取這些檔案並轉成 `a01.specMarkdown` 陣列，後端會用分隔線 (`---`) 合併後寫入「系統規格書」。
 
 ## Run With curl
 

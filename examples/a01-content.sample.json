@@ -1,0 +1,61 @@
+{
+  "a01": {
+    "date": "2026-04-24",
+    "product": "寶可夢",
+    "productContact": "王小明",
+    "devLead": "Tom",
+    "signDevLead": ["Tom"],
+    "item": "API 測試建立 A01",
+    "jira": "GXY-1234",
+    "description": "這是透過 Web App API 建立的測試表單",
+    "signer": ["王小明", "陳小華"],
+    "tester": ["王小明", "陳小華"],
+    "productOwner": ["王小明", "陳小華"],
+    "manager": ["王小明", "陳小華"],
+    "type": {
+      "newFeature": true,
+      "modifyFeature": false
+    },
+    "changeArea": {
+      "api": true,
+      "sdk": false,
+      "backend": true,
+      "dataCenter": false,
+      "database": false,
+      "other": false
+    },
+    "sensitive": {
+      "mode": "none",
+      "detail": ""
+    },
+    "security": {
+      "mode": "existing",
+      "detail": ""
+    },
+    "versionRows": [
+      {
+        "date": "2026-04-24",
+        "code": "V1.0",
+        "person": "Tom",
+        "desc": "初版"
+      },
+      {
+        "date": "2026-04-28",
+        "code": "V1.1",
+        "person": "Tom",
+        "desc": "新增 API 端點與錯誤處理"
+      },
+      {
+        "date": "2026-04-29",
+        "code": "V1.2",
+        "person": "王小明",
+        "desc": "調整資料庫欄位與效能優化"
+      }
+    ],
+    "specMarkdownFiles": [
+      "./templates/spec-overview.md",
+      "./templates/spec-api.md",
+      "./templates/spec-test.md"
+    ]
+  }
+}

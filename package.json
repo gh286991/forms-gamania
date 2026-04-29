@@ -8,14 +8,11 @@
     "typecheck": "tsc --noEmit",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "clasp": "clasp",
     "login": "clasp login",
-    "push": "npm run build && clasp push --force",
+    "push": "clasp push --force",
     "open": "clasp open-script",
     "open:web": "clasp open-web-app",
-    "deploy": "npm run build && npm run push && node scripts/deploy.mjs",
-    "copy:a01": "node scripts/copy-form-webapp.mjs --form a01",
-    "form:a01": "npm run deploy && npm run copy:a01"
+    "deploy": "npm run build && npm run push && node scripts/deploy.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.4",

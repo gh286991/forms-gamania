@@ -31,31 +31,60 @@ function parseArgs(argv) {
 }
 
 function resolveMarkdownFiles(config, configDir) {
-  if (!config.markdownFiles || typeof config.markdownFiles !== "object") {
-    return config;
-  }
   const result = { ...config };
-  result.markdownReplace = result.markdownReplace || {};
+  let changed = false;
 
-  for (const [placeholder, files] of Object.entries(config.markdownFiles)) {
-    const fileArray = Array.isArray(files) ? files : [files];
-    const contents = [];
-    for (const f of fileArray) {
-      const resolved = path.resolve(configDir, f);
-      if (!fs.existsSync(resolved)) {
-        console.error(`markdownFiles: 找不到 ${resolved}`);
-        continue;
+  if (config.markdownFiles && typeof config.markdownFiles === "object") {
+    result.markdownReplace = result.markdownReplace || {};
+
+    for (const [placeholder, files] of Object.entries(config.markdownFiles)) {
+      const fileArray = Array.isArray(files) ? files : [files];
+      const contents = loadMarkdownFiles(fileArray, configDir, "markdownFiles");
+      if (contents.length > 0) {
+        result.markdownReplace[placeholder] = contents;
+        changed = true;
       }
-      console.log(`markdownFiles: 載入 ${resolved}`);
-      contents.push(fs.readFileSync(resolved, "utf8"));
     }
-    if (contents.length > 0) {
-      result.markdownReplace[placeholder] = contents;
-    }
+
+    delete result.markdownFiles;
+    changed = true;
   }
 
-  delete result.markdownFiles;
+  // Semantic A01 payload support: load multiple markdown templates from files.
+  if (result.a01 && typeof result.a01 === "object" && result.a01.specMarkdownFiles) {
+    const fileArray = Array.isArray(result.a01.specMarkdownFiles)
+      ? result.a01.specMarkdownFiles
+      : [result.a01.specMarkdownFiles];
+    const contents = loadMarkdownFiles(fileArray, configDir, "a01.specMarkdownFiles");
+    if (contents.length > 0) {
+      const existing = Array.isArray(result.a01.specMarkdown)
+        ? result.a01.specMarkdown
+        : result.a01.specMarkdown
+          ? [result.a01.specMarkdown]
+          : [];
+      result.a01.specMarkdown = [...existing, ...contents];
+      changed = true;
+    }
+    delete result.a01.specMarkdownFiles;
+    changed = true;
+  }
+
+  if (!changed) return config;
   return result;
+}
+
+function loadMarkdownFiles(files, configDir, sourceLabel) {
+  const contents = [];
+  for (const f of files) {
+    const resolved = path.resolve(configDir, f);
+    if (!fs.existsSync(resolved)) {
+      console.error(`${sourceLabel}: 找不到 ${resolved}`);
+      continue;
+    }
+    console.log(`${sourceLabel}: 載入 ${resolved}`);
+    contents.push(fs.readFileSync(resolved, "utf8"));
+  }
+  return contents;
 }
 
 async function main() {
