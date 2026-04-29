@@ -17,10 +17,10 @@
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "executionApi": {
-    "access": "MYSELF"
+    "access": "DOMAIN"
   },
   "webapp": {
-    "executeAs": "USER_DEPLOYING",
-    "access": "MYSELF"
+    "executeAs": "USER_ACCESSING",
+    "access": "DOMAIN"
   }
 }

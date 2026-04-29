@@ -7,6 +7,7 @@ export function hasStructuredDocConfig(config?: StructuredDocConfig): boolean {
     config.clearTemplate === true ||
     (config.replaceText && Object.keys(config.replaceText).length > 0) ||
     (config.keyValues && Object.keys(config.keyValues).length > 0) ||
+    (config.tableRows && config.tableRows.length > 0) ||
     (config.sections && config.sections.length > 0) ||
     (config.appendParagraphs && config.appendParagraphs.length > 0) ||
     (config.bullets && config.bullets.length > 0) ||
@@ -34,6 +35,14 @@ export function applyStructuredConfigToDoc(docId: string, config: StructuredDocC
 
   if (config.clearTemplate) {
     clearMappedKeyValuesInPlace(body, sortedKeyEntries.map(([key]) => key));
+  }
+
+  if (config.tableRows) {
+    for (const spec of config.tableRows) {
+      for (const b of allBodies) {
+        expandTableRows(b, spec);
+      }
+    }
   }
 
   if (config.replaceText) {
@@ -128,6 +137,7 @@ export function applyStructuredConfigToDoc(docId: string, config: StructuredDocC
 
   if (config.markdownSections) {
     const renderMode: "raw" | "rich" = config.markdownRenderMode === "rich" ? "rich" : "raw";
+    const specBody = allBodies.length > 1 ? allBodies[1] : body;
     for (const section of config.markdownSections) {
       const title = String(section.title || "").trim();
       const markdown = Array.isArray(section.content)
@@ -135,9 +145,9 @@ export function applyStructuredConfigToDoc(docId: string, config: StructuredDocC
         : String(section.content || "");
       if (!markdown.trim()) continue;
 
-      body.appendParagraph("");
-      if (title) body.appendParagraph(title).setHeading(DocumentApp.ParagraphHeading.HEADING2);
-      renderMarkdownToBody(body, markdown, body.getNumChildren(), renderMode);
+      specBody.appendParagraph("");
+      if (title) specBody.appendParagraph(title).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+      renderMarkdownToBody(specBody, markdown, specBody.getNumChildren(), renderMode);
       report.replacedMarkdown.push(title ? `append:${title}` : "append:markdown");
     }
   }
@@ -341,6 +351,114 @@ function collectElementLines(element: GoogleAppsScript.Document.Element): string
     return lines;
   }
   return [];
+}
+
+function expandTableRows(
+  body: GoogleAppsScript.Document.Body,
+  spec: { marker: string; rows: string[][] }
+): void {
+  if (!spec.rows.length) return;
+
+  for (let ti = 0; ti < body.getNumChildren(); ti++) {
+    const child = body.getChild(ti);
+    if (child.getType() !== DocumentApp.ElementType.TABLE) continue;
+    const table = child.asTable();
+
+    // Find the template row containing the marker
+    let templateRowIdx = -1;
+    outerLoop:
+    for (let ri = 0; ri < table.getNumRows(); ri++) {
+      const row = table.getRow(ri);
+      for (let ci = 0; ci < row.getNumCells(); ci++) {
+        if (row.getCell(ci).getText().includes(spec.marker)) {
+          templateRowIdx = ri;
+          break outerLoop;
+        }
+      }
+    }
+    if (templateRowIdx < 0) continue;
+
+    const templateRow = table.getRow(templateRowIdx);
+    const numCols = templateRow.getNumCells();
+
+    // Capture per-cell formatting from the template row
+    type CellStyle = {
+      alignment: GoogleAppsScript.Document.HorizontalAlignment | null;
+      fontFamily: string | null;
+      fontSize: number | null;
+      bold: boolean | null;
+      paddingTop: number | null;
+      paddingBottom: number | null;
+      paddingLeft: number | null;
+      paddingRight: number | null;
+      spacingBefore: number | null;
+      spacingAfter: number | null;
+      lineSpacing: number | null;
+    };
+    const cellStyles: CellStyle[] = [];
+    for (let ci = 0; ci < numCols; ci++) {
+      const cell = templateRow.getCell(ci);
+      const para = cell.getNumChildren() > 0 ? cell.getChild(0).asParagraph() : null;
+      const text = para ? para.editAsText() : null;
+      cellStyles.push({
+        alignment: para ? para.getAlignment() : null,
+        fontFamily: text ? text.getFontFamily() : null,
+        fontSize: text ? text.getFontSize() : null,
+        bold: text ? text.isBold() : null,
+        paddingTop: cell.getPaddingTop(),
+        paddingBottom: cell.getPaddingBottom(),
+        paddingLeft: cell.getPaddingLeft(),
+        paddingRight: cell.getPaddingRight(),
+        spacingBefore: para ? para.getSpacingBefore() : null,
+        spacingAfter: para ? para.getSpacingAfter() : null,
+        lineSpacing: para ? para.getLineSpacing() : null,
+      });
+    }
+    const templateMinHeight = templateRow.getMinimumHeight();
+
+    // Fill template row (first data row) — setText preserves existing character formatting
+    const firstRow = spec.rows[0];
+    for (let ci = 0; ci < Math.min(numCols, firstRow.length); ci++) {
+      const cell = templateRow.getCell(ci);
+      const para = cell.getNumChildren() > 0 ? cell.getChild(0).asParagraph() : null;
+      const text = para ? para.editAsText() : cell.editAsText();
+      text.setText(firstRow[ci] ?? "");
+    }
+
+    // Insert and fill additional rows after the template row
+    for (let ri = 1; ri < spec.rows.length; ri++) {
+      const newRow = table.insertTableRow(templateRowIdx + ri);
+      newRow.setMinimumHeight(templateMinHeight);
+      while (newRow.getNumCells() < numCols) {
+        newRow.appendTableCell();
+      }
+      const dataRow = spec.rows[ri];
+      for (let ci = 0; ci < Math.min(newRow.getNumCells(), dataRow.length); ci++) {
+        const cell = newRow.getCell(ci);
+        const style = cellStyles[ci];
+
+        if (style.paddingTop !== null) cell.setPaddingTop(style.paddingTop);
+        if (style.paddingBottom !== null) cell.setPaddingBottom(style.paddingBottom);
+        if (style.paddingLeft !== null) cell.setPaddingLeft(style.paddingLeft);
+        if (style.paddingRight !== null) cell.setPaddingRight(style.paddingRight);
+
+        const para = cell.getNumChildren() > 0
+          ? cell.getChild(0).asParagraph()
+          : cell.appendParagraph("");
+        if (style.alignment) para.setAlignment(style.alignment);
+        if (style.spacingBefore !== null) para.setSpacingBefore(style.spacingBefore);
+        if (style.spacingAfter !== null) para.setSpacingAfter(style.spacingAfter);
+        if (style.lineSpacing !== null) para.setLineSpacing(style.lineSpacing);
+        const text = para.editAsText();
+        text.setText(dataRow[ci] ?? "");
+        if (style.bold !== null) text.setBold(style.bold);
+        if (style.fontFamily) text.setFontFamily(style.fontFamily);
+        if (style.fontSize) text.setFontSize(style.fontSize);
+      }
+    }
+
+    return;
+  }
 }
 
 function normalizeFieldKey(raw: string): string {

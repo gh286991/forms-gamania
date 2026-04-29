@@ -37,6 +37,10 @@ function copyTemplateDocToFolder() {
 function inspectTemplateFields() {
   return AppScriptBundle.inspectTemplateFields.apply(this, arguments);
 }
+
+function getSharedUsers() {
+  return AppScriptBundle.getSharedUsers.apply(this, arguments);
+}
 `;
 
 await mkdir("dist/webapp", { recursive: true });

@@ -66,12 +66,18 @@ export function getDriveApi(): {
     get: (id: string, args: Record<string, unknown>) => Record<string, unknown>;
     copy: (resource: Record<string, unknown>, id: string, args?: Record<string, unknown>) => Record<string, unknown>;
   };
+  Permissions: {
+    list: (fileId: string, args?: Record<string, unknown>) => Record<string, unknown>;
+  };
 } {
   const api = (globalThis as Record<string, unknown>).Drive as {
     Files?: {
       list: (args: Record<string, unknown>) => Record<string, unknown>;
       get: (id: string, args: Record<string, unknown>) => Record<string, unknown>;
       copy: (resource: Record<string, unknown>, id: string, args?: Record<string, unknown>) => Record<string, unknown>;
+    };
+    Permissions?: {
+      list: (fileId: string, args?: Record<string, unknown>) => Record<string, unknown>;
     };
   } | undefined;
 
@@ -81,9 +87,12 @@ export function getDriveApi(): {
 
   return {
     Files: {
-      list: api.Files.list,
-      get: api.Files.get,
-      copy: api.Files.copy
+      list: (args) => api.Files!.list(args),
+      get: (id, args) => api.Files!.get(id, args),
+      copy: (resource, id, args) => api.Files!.copy(resource, id, args ?? {})
+    },
+    Permissions: {
+      list: (fileId, args) => api.Permissions?.list(fileId, args) ?? { items: [] }
     }
   };
 }
@@ -151,23 +160,35 @@ function getFolderMetadataById(folderId: string): DriveApiFile {
   return file;
 }
 
+function listDriveFilesOnce(drive: ReturnType<typeof getDriveApi>, query: string, maxFiles: number, pageToken?: string): Record<string, unknown> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = drive.Files.list({
+        q: query,
+        maxResults: Math.min(1000, maxFiles),
+        pageToken,
+        fields: "items(id,title,mimeType,modifiedDate,fileSize,alternateLink,webViewLink),nextPageToken",
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+        includeTeamDriveItems: true,
+        supportsTeamDrives: true
+      } as Record<string, unknown>) as Record<string, unknown>;
+      if (response) return response;
+    } catch (e) {
+      if (attempt === 2) throw e;
+      Utilities.sleep(1000 * (attempt + 1));
+    }
+  }
+  return {};
+}
+
 function listDriveFiles(query: string, maxFiles: number): DriveApiFile[] {
   const files: DriveApiFile[] = [];
   let pageToken: string | undefined;
   const drive = getDriveApi();
 
   while (files.length < maxFiles) {
-    const response = drive.Files.list({
-      q: query,
-      maxResults: Math.min(1000, maxFiles - files.length),
-      pageToken,
-      fields: "items(id,title,mimeType,modifiedDate,fileSize,alternateLink,webViewLink),nextPageToken",
-      includeItemsFromAllDrives: true,
-      supportsAllDrives: true,
-      includeTeamDriveItems: true,
-      supportsTeamDrives: true
-    } as Record<string, unknown>) as Record<string, unknown>;
-
+    const response = listDriveFilesOnce(drive, query, maxFiles - files.length, pageToken);
     const items = (response.items as DriveApiFile[] | undefined) || [];
     files.push(...items);
 

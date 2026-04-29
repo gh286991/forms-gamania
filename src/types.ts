@@ -50,12 +50,18 @@ export type TemplateCopyResult = {
   applyReport?: ApplyConfigReport;
 };
 
+export type TableRowsSpec = {
+  marker: string;    // placeholder in the template row to locate it, e.g. "{{版本編號}}"
+  rows: string[][];  // [rowIndex][colIndex] — values to fill, by column order
+};
+
 export type StructuredDocConfig = {
   clearTemplate?: boolean;
   markdownRenderMode?: "raw" | "rich";
   replaceText?: Record<string, string>;
   keyValues?: Record<string, string>;
   appendUnknownKeyValues?: boolean;
+  tableRows?: TableRowsSpec[];
   sections?: Array<{
     title: string;
     content: string | string[];

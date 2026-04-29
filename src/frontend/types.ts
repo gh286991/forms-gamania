@@ -43,15 +43,19 @@ export type CopyResponse = {
   message?: string;
 };
 
+export type VersionRow = {
+  date: string;
+  code: string;
+  person: string;
+  desc: string;
+};
+
 export type FormValues = {
   date: string;
   product: string;
   productContact: string;
   devLead: string;
-  versionDate: string;
-  versionCode: string;
-  devPerson: string;
-  versionDesc: string;
+  versionRows: VersionRow[];
   item: string;
   jira: string;
   sensitive: string;
@@ -59,10 +63,10 @@ export type FormValues = {
   security: string;
   securityDetail: string;
   description: string;
-  signer: string;
-  tester: string;
-  productOwner: string;
-  manager: string;
+  signer: string[];
+  tester: string[];
+  productOwner: string[];
+  manager: string[];
   newFeature: boolean;
   modifyFeature: boolean;
   api: boolean;
@@ -71,7 +75,7 @@ export type FormValues = {
   dataCenter: boolean;
   database: boolean;
   other: boolean;
-  signDevLead: string;
+  signDevLead: string[];
 };
 
 export type RouteState = {
@@ -99,4 +103,9 @@ export type FormOption = {
   label: string;
   enabled: boolean;
   desc: string;
+};
+
+export type SharedUser = {
+  name: string;
+  email: string;
 };

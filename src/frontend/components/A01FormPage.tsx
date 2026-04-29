@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { DriveAuthState, FormValues, MessageState } from "../types";
+import type { DriveAuthState, FormValues, MessageState, SharedUser, VersionRow } from "../types";
 import type { CopyResponse } from "../types";
 import { callGas } from "../utils/callGas";
-import { parseJsonMaybe, toSlashDate, toPlainText } from "../utils/helpers";
+import { parseJsonMaybe, toSlashDate, toPlainText, toChineseName } from "../utils/helpers";
 import { inlineMarkdown } from "../utils/markdown";
+import { SearchableSelect, MultiSearchableSelect } from "./SearchableSelect";
 
 const MARKDOWN_DEFAULT = "# 系統規格書\n\n請在此輸入規格內容。";
 
@@ -37,7 +38,6 @@ export function A01FormPage({
   const [activeTab, setActiveTab] = useState<"form" | "spec">("form");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<MessageState>({ kind: "none", text: "" });
-  const [devTouched, setDevTouched] = useState(false);
   const [specFileName, setSpecFileName] = useState("");
   const [specMarkdown, setSpecMarkdown] = useState(MARKDOWN_DEFAULT);
   const [form, setForm] = useState<FormValues>({
@@ -45,10 +45,7 @@ export function A01FormPage({
     product: "",
     productContact: "",
     devLead: "",
-    versionDate: today,
-    versionCode: "V1.0",
-    devPerson: "",
-    versionDesc: "初版",
+    versionRows: [{ date: today, code: "V1.0", person: "", desc: "初版" }],
     item: "",
     jira: "",
     sensitive: "none",
@@ -56,10 +53,10 @@ export function A01FormPage({
     security: "existing",
     securityDetail: "",
     description: "",
-    signer: "",
-    tester: "",
-    productOwner: "",
-    manager: "",
+    signer: [],
+    tester: [],
+    productOwner: [],
+    manager: [],
     newFeature: false,
     modifyFeature: false,
     api: false,
@@ -68,19 +65,82 @@ export function A01FormPage({
     dataCenter: false,
     database: false,
     other: false,
-    signDevLead: ""
+    signDevLead: []
   });
 
-  useEffect(() => {
-    if (!devTouched) {
-      setForm((prev) => ({ ...prev, signDevLead: prev.devLead }));
-    }
-  }, [form.devLead, devTouched]);
+  const [sharedUsers, setSharedUsers] = useState<SharedUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
-  const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
+  useEffect(() => {
+    let cancelled = false;
+    async function warmUp() {
+      for (let i = 0; i < 5; i++) {
+        if (cancelled) return;
+        try {
+          await callGas((runner) => { (runner as any).warmUpDrive(); });
+          return;
+        } catch {}
+        await new Promise<void>((r) => setTimeout(r, 2000 * (i + 1)));
+      }
+    }
+    warmUp();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUsers() {
+      setUsersLoading(true);
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        if (cancelled) return;
+        try {
+          const raw = await callGas<string>((runner) => {
+            (runner as any).getSharedUsers("a01");
+          });
+          if (cancelled) return;
+          const parsed = parseJsonMaybe<{ ok?: boolean; users?: SharedUser[] }>(raw);
+          if (parsed?.ok && Array.isArray(parsed.users) && parsed.users.length > 0) {
+            setSharedUsers(parsed.users);
+            break;
+          }
+        } catch {}
+        if (attempt < 2) {
+          await new Promise<void>((r) => setTimeout(r, 1500 * (attempt + 1)));
+        }
+      }
+      if (!cancelled) setUsersLoading(false);
+    }
+
+    loadUsers();
+    return () => { cancelled = true; };
+  }, []);
+
+const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
 
   function setValue<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateVersionRow(idx: number, key: keyof VersionRow, value: string) {
+    setForm((prev) => ({
+      ...prev,
+      versionRows: prev.versionRows.map((row, i) => i === idx ? { ...row, [key]: value } : row)
+    }));
+  }
+
+  function addVersionRow() {
+    setForm((prev) => ({
+      ...prev,
+      versionRows: [...prev.versionRows, { date: today, code: "", person: "", desc: "" }]
+    }));
+  }
+
+  function removeVersionRow(idx: number) {
+    setForm((prev) => ({
+      ...prev,
+      versionRows: prev.versionRows.filter((_, i) => i !== idx)
+    }));
   }
 
   async function submitForm() {
@@ -94,34 +154,42 @@ export function A01FormPage({
       replaceText: {
         "{{日期}}": toSlashDate(form.date),
         "{{需求產品}}": toPlainText(form.product),
-        "{{產品窗口}}": toPlainText(form.productContact),
-        "{{開發負責人}}": toPlainText(form.devLead || form.signDevLead),
-        "{{版本編號}}": form.versionCode || "V1.0",
-        "{{開發人員}}": toPlainText(form.devPerson),
-        "{{版本描述}}": form.versionDesc || "初版",
+        "{{產品窗口}}": toChineseName(form.productContact),
+        "{{開發負責人}}": toChineseName(form.devLead),
+        "{{開發負責人S}}": form.signDevLead.map(toChineseName).join("\n"),
         "{{項目}}": toPlainText(form.item),
         "{{JIRA}}": toPlainText(form.jira),
         "{{說明}}": toPlainText(form.description),
-        "{{經辦}}": toPlainText(form.signer),
-        "{{測試人員確認}}": toPlainText(form.tester),
-        "{{產品負責人}}": toPlainText(form.productOwner),
-        "{{部門主管}}": toPlainText(form.manager),
-        "{{新增功能}}": form.newFeature ? "■" : "□",
-        "{{修改功能}}": form.modifyFeature ? "■" : "□",
-        "{{API}}": form.api ? "■" : "□",
-        "{{SDK}}": form.sdk ? "■" : "□",
-        "{{後台}}": form.backend ? "■" : "□",
-        "{{數據中心}}": form.dataCenter ? "■" : "□",
-        "{{資料庫}}": form.database ? "■" : "□",
-        "{{其他}}": form.other ? "■" : "□",
-        "{{無涉及機敏資訊}}": form.sensitive === "none" ? "■" : "□",
-        "{{涉及部分資訊}}": form.sensitive === "partial" ? "■" : "□",
+        "{{經辦}}": form.signer.map(toChineseName).join("\n"),
+        "{{測試人員確認}}": form.tester.map(toChineseName).join("\n"),
+        "{{產品負責人}}": form.productOwner.map(toChineseName).join("\n"),
+        "{{部門主管}}": form.manager.map(toChineseName).join("\n"),
+        "{{新增功能}}": form.newFeature ? "⬛" : "⬚",
+        "{{修改功能}}": form.modifyFeature ? "⬛" : "⬚",
+        "{{API}}": form.api ? "⬛" : "⬚",
+        "{{SDK}}": form.sdk ? "⬛" : "⬚",
+        "{{後台}}": form.backend ? "⬛" : "⬚",
+        "{{數據中心}}": form.dataCenter ? "⬛" : "⬚",
+        "{{資料庫}}": form.database ? "⬛" : "⬚",
+        "{{其他}}": form.other ? "⬛" : "⬚",
+        "{{無涉及機敏資訊}}": form.sensitive === "none" ? "⬛" : "⬚",
+        "{{涉及部分資訊}}": form.sensitive === "partial" ? "⬛" : "⬚",
         "{{涉及部分資訊說明}}": toPlainText(form.sensitiveDetail),
-        "{{按照既有資安架構}}": form.security === "existing" ? "■" : "□",
-        "{{額外套用條件}}": form.security === "extra" ? "■" : "□",
+        "{{按照既有資安架構}}": form.security === "existing" ? "⬛" : "⬚",
+        "{{額外套用條件}}": form.security === "extra" ? "⬛" : "⬚",
         "{{額外套用條件說明}}": toPlainText(form.securityDetail)
       }
     };
+
+    config.tableRows = [{
+      marker: "{{版本編號}}",
+      rows: form.versionRows.map((r) => [
+        toSlashDate(r.date),
+        r.code || "V1.0",
+        toChineseName(r.person),
+        r.desc || ""
+      ])
+    }];
 
     if ((specMarkdown || "").trim()) {
       config.markdownRenderMode = "rich";
@@ -246,22 +314,22 @@ export function A01FormPage({
                   </td>
                   <td className={TD}>
                     產品窗口：
-                    <input
-                      type="text"
+                    <SearchableSelect
                       value={form.productContact}
-                      onChange={(e) => setValue("productContact", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("productContact", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                   <td className={TD}>
                     開發負責人：
-                    <input
-                      type="text"
+                    <SearchableSelect
                       value={form.devLead}
-                      onChange={(e) => setValue("devLead", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("devLead", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                 </tr>
@@ -272,49 +340,71 @@ export function A01FormPage({
             <table className="w-full border-collapse mb-3.5">
               <tbody>
                 <tr>
-                  <th className={SECTION_TH} colSpan={4}>版本歷程</th>
+                  <th className={SECTION_TH} colSpan={5}>版本歷程</th>
                 </tr>
                 <tr>
                   <th className={COL_HEADER}>日期</th>
                   <th className={COL_HEADER}>版本編號</th>
                   <th className={COL_HEADER}>開發人員</th>
                   <th className={COL_HEADER}>版本描述</th>
+                  <th className={`${COL_HEADER} w-[36px]`}></th>
                 </tr>
+                {form.versionRows.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className={TD}>
+                      <input
+                        type="date"
+                        value={row.date}
+                        onChange={(e) => updateVersionRow(idx, "date", e.target.value)}
+                        className={TEXT_INPUT}
+                      />
+                    </td>
+                    <td className={TD}>
+                      <input
+                        type="text"
+                        value={row.code}
+                        onChange={(e) => updateVersionRow(idx, "code", e.target.value)}
+                        placeholder="V1.0"
+                        className={TEXT_INPUT}
+                      />
+                    </td>
+                    <td className={TD}>
+                      <SearchableSelect
+                        value={row.person}
+                        onChange={(v) => updateVersionRow(idx, "person", v)}
+                        options={sharedUsers}
+                        loading={usersLoading}
+                        placeholder="搜尋姓名"
+                      />
+                    </td>
+                    <td className={TD}>
+                      <input
+                        type="text"
+                        value={row.desc}
+                        onChange={(e) => updateVersionRow(idx, "desc", e.target.value)}
+                        placeholder="初版"
+                        className={TEXT_INPUT}
+                      />
+                    </td>
+                    <td className={`${TD} text-center`}>
+                      {form.versionRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeVersionRow(idx)}
+                          className="text-[#aaa] hover:text-[#c62828] text-[16px] leading-none"
+                          title="刪除此列"
+                        >✕</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
                 <tr>
-                  <td className={TD}>
-                    <input
-                      type="date"
-                      value={form.versionDate}
-                      onChange={(e) => setValue("versionDate", e.target.value)}
-                      className={TEXT_INPUT}
-                    />
-                  </td>
-                  <td className={TD}>
-                    <input
-                      type="text"
-                      value={form.versionCode}
-                      onChange={(e) => setValue("versionCode", e.target.value)}
-                      placeholder="V1.0"
-                      className={TEXT_INPUT}
-                    />
-                  </td>
-                  <td className={TD}>
-                    <input
-                      type="text"
-                      value={form.devPerson}
-                      onChange={(e) => setValue("devPerson", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
-                    />
-                  </td>
-                  <td className={TD}>
-                    <input
-                      type="text"
-                      value={form.versionDesc}
-                      onChange={(e) => setValue("versionDesc", e.target.value)}
-                      placeholder="初版"
-                      className={TEXT_INPUT}
-                    />
+                  <td colSpan={5} className={TD}>
+                    <button
+                      type="button"
+                      onClick={addVersionRow}
+                      className="text-[#0a66c2] text-[13px] hover:underline"
+                    >＋ 新增版本</button>
                   </td>
                 </tr>
               </tbody>
@@ -541,51 +631,48 @@ export function A01FormPage({
                 </tr>
                 <tr>
                   <td className={`${TD} text-center`}>
-                    <input
-                      type="text"
+                    <MultiSearchableSelect
                       value={form.signDevLead}
-                      onChange={(e) => {
-                        setValue("signDevLead", e.target.value);
-                        setDevTouched(true);
-                      }}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("signDevLead", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                   <td className={`${TD} text-center`}>
-                    <input
-                      type="text"
+                    <MultiSearchableSelect
                       value={form.signer}
-                      onChange={(e) => setValue("signer", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("signer", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                   <td className={`${TD} text-center`}>
-                    <input
-                      type="text"
+                    <MultiSearchableSelect
                       value={form.tester}
-                      onChange={(e) => setValue("tester", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("tester", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                   <td className={`${TD} text-center`}>
-                    <input
-                      type="text"
+                    <MultiSearchableSelect
                       value={form.productOwner}
-                      onChange={(e) => setValue("productOwner", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("productOwner", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                   <td className={`${TD} text-center`}>
-                    <input
-                      type="text"
+                    <MultiSearchableSelect
                       value={form.manager}
-                      onChange={(e) => setValue("manager", e.target.value)}
-                      placeholder="姓名"
-                      className={TEXT_INPUT}
+                      onChange={(v) => setValue("manager", v)}
+                      options={sharedUsers}
+                      loading={usersLoading}
+                      placeholder="搜尋姓名"
                     />
                   </td>
                 </tr>

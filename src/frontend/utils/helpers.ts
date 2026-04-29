@@ -28,6 +28,11 @@ export function toPlainText(value: unknown): string {
   return value == null ? "" : String(value);
 }
 
+export function toChineseName(name: string): string {
+  const cleaned = (name || "").replace(/[a-zA-Z0-9\s()[\].,'"@#_-]/g, "").trim();
+  return cleaned || name;
+}
+
 export function parseAuthMessage(message: string): DriveAuthState {
   const text = String(message || "").trim();
   if (!text) return { checked: true, status: "error", message: "授權檢查未回傳訊息" };

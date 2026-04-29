@@ -23,11 +23,11 @@ export function copyFormTemplate(formCode: string, config?: StructuredDocConfig)
   const resolvedFolder = resolveTargetFolder(entry.targetFolderPath, "");
   const existing = listCurrentLevelEntries(resolvedFolder.folderId, MAX_FILES);
   const monthCount = existing.rows.filter((f) => f.name.startsWith(monthPrefix)).length;
-  const serialCode = `${yy}${mm}${monthCount + 1}`;
+  const serialCode = `${yy}${mm}${String(monthCount + 1).padStart(3, "0")}`;
 
   const itemName = config?.replaceText?.["{{項目}}"] || "";
   const newFileName = itemName
-    ? `${entry.prefix}-${serialCode}_${itemName}`
+    ? `${entry.prefix}-${serialCode}-${itemName}`
     : `${entry.prefix}-${serialCode}`;
 
   return JSON.stringify(copyTemplateDocToFolder({
@@ -135,6 +135,50 @@ export function inspectTemplateFields(templateDocIdOrUrl: string): TemplateInspe
     lineSamples: lines.slice(0, 80),
     sampleConfig: { replaceText, keyValues }
   };
+}
+
+export function getSharedUsers(formCode?: string): string {
+  try {
+    const code = (formCode || "a01").toLowerCase();
+    const entry = FORM_REGISTRY[code];
+    if (!entry) {
+      return JSON.stringify({ ok: false, error: `未知表單代碼：${code}` });
+    }
+
+    const folder = resolveTargetFolder(entry.targetFolderPath, "");
+    const drive = getDriveApi();
+    const response = drive.Permissions.list(folder.folderId, {
+      fields: "items(emailAddress,name,role,type)",
+      supportsAllDrives: true,
+      supportsTeamDrives: true
+    });
+
+    type PermissionItem = { emailAddress?: string; name?: string; role?: string; type?: string };
+    const items = (response.items as PermissionItem[] | undefined) || [];
+    const users = items
+      .filter((p) => p.type === "user" && p.emailAddress)
+      .map((p) => ({ name: p.name || p.emailAddress || "", email: p.emailAddress || "" }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return JSON.stringify({ ok: true, users });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ ok: false, error: message });
+  }
+}
+
+export function warmUpDrive(): string {
+  try {
+    getDriveApi().Files.list({
+      maxResults: 1,
+      fields: "items(id)",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    } as Record<string, unknown>);
+    return "ok";
+  } catch {
+    return "error";
+  }
 }
 
 export function authorizeDriveAccess(): string {

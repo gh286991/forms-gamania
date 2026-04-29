@@ -13,12 +13,9 @@
     "push": "npm run build && clasp push --force",
     "open": "clasp open-script",
     "open:web": "clasp open-web-app",
-    "deploy": "npm run build && node scripts/deploy.mjs",
-    "list:drive:exec": "node scripts/list-drive.mjs",
-    "list:drive": "node scripts/list-drive-webapp.mjs",
+    "deploy": "npm run build && npm run push && node scripts/deploy.mjs",
     "copy:a01": "node scripts/copy-form-webapp.mjs --form a01",
-    "inspect:a01": "node scripts/inspect-form-webapp.mjs --form a01",
-    "form:a01": "npm run build && npm run push && npm run deploy && npm run copy:a01"
+    "form:a01": "npm run deploy && npm run copy:a01"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.4",
