@@ -156,6 +156,22 @@ export function applyStructuredConfigToDoc(docId: string, config: StructuredDocC
   return report;
 }
 
+export function applyContentOnlyToDoc(docId: string, config: StructuredDocConfig): ApplyConfigReport {
+  return applyStructuredConfigToDoc(docId, {
+    ...config,
+    markdownReplace: undefined,
+    markdownSections: undefined
+  });
+}
+
+export function applyMarkdownOnlyToDoc(docId: string, config: StructuredDocConfig): ApplyConfigReport {
+  return applyStructuredConfigToDoc(docId, {
+    markdownRenderMode: config.markdownRenderMode,
+    markdownReplace: config.markdownReplace,
+    markdownSections: config.markdownSections
+  });
+}
+
 export function collectBodyLines(body: GoogleAppsScript.Document.Body): string[] {
   const lines: string[] = [];
   for (let i = 0; i < body.getNumChildren(); i += 1) {

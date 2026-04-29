@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { FORM_REGISTRY, DEFAULT_DRIVE_PATH, MAX_FILES } from "./config";
 import { resolveTargetFolder, listCurrentLevelEntries, extractDriveFileId, getDriveApi, buildDriveFileUrl } from "./drive";
-import { hasStructuredDocConfig, applyStructuredConfigToDoc, collectBodyLines, extractPlaceholdersFromLine, extractLabelCandidate, collectTableKeyCandidates } from "./doc";
+import { hasStructuredDocConfig, applyStructuredConfigToDoc, applyContentOnlyToDoc, applyMarkdownOnlyToDoc, collectBodyLines, extractPlaceholdersFromLine, extractLabelCandidate, collectTableKeyCandidates } from "./doc";
 
 export function copyFormTemplate(formCode: string, config?: StructuredDocConfig): string {
   const entry = FORM_REGISTRY[formCode.toLowerCase()];
@@ -40,6 +40,51 @@ export function copyFormTemplate(formCode: string, config?: StructuredDocConfig)
       replaceText: { "{{編號}}": serialCode, ...config?.replaceText }
     }
   }), null, 2);
+}
+
+export function copyFormTemplateInit(formCode: string, config?: StructuredDocConfig): TemplateCopyResult {
+  const entry = FORM_REGISTRY[formCode.toLowerCase()];
+  if (!entry) {
+    throw new Error(`未知表單代碼：${formCode}，可用代碼：${Object.keys(FORM_REGISTRY).join(", ")}`);
+  }
+
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const monthPrefix = `${entry.prefix}-${yy}${mm}`;
+
+  const resolvedFolder = resolveTargetFolder(entry.targetFolderPath, "");
+  const existing = listCurrentLevelEntries(resolvedFolder.folderId, MAX_FILES);
+  const monthCount = existing.rows.filter((f) => f.name.startsWith(monthPrefix)).length;
+  const serialCode = `${yy}${mm}${String(monthCount + 1).padStart(3, "0")}`;
+
+  const itemName = config?.replaceText?.["{{項目}}"] || "";
+  const newFileName = itemName
+    ? `${entry.prefix}-${serialCode}-${itemName}`
+    : `${entry.prefix}-${serialCode}`;
+
+  const drive = getDriveApi();
+  const templateDocId = extractDriveFileId(entry.templateDocUrl);
+  const copied = drive.Files.copy(
+    { title: newFileName, parents: [{ id: resolvedFolder.folderId }] },
+    templateDocId,
+    { fields: "id,title,alternateLink,webViewLink,mimeType", supportsAllDrives: true, supportsTeamDrives: true }
+  ) as { id?: string; title?: string; alternateLink?: string; webViewLink?: string };
+
+  if (!copied.id) throw new Error("複製完成但沒有取得新檔案 ID。");
+
+  return {
+    ok: true,
+    templateDocId,
+    sourceName: entry.templateDocUrl,
+    targetFolderId: resolvedFolder.folderId,
+    targetPath: resolvedFolder.normalizedPath,
+    newName: newFileName,
+    newFileId: copied.id,
+    newFileUrl: buildDriveFileUrl(copied),
+    configApplied: false,
+    _serialCode: serialCode
+  } as TemplateCopyResult & { _serialCode: string };
 }
 
 export function inspectFormTemplate(formCode: string): string {
@@ -335,8 +380,31 @@ export function doPost(e?: GoogleAppsScript.Events.DoPost): GoogleAppsScript.Con
     const action = (payload.action || "").toLowerCase();
 
     if (action === "copy_form") {
+      const step = String(payload.step || "").trim();
       const formCode = (payload.form || "a01").toLowerCase();
       const normalizedConfig = normalizeCopyFormConfig(formCode, payload);
+
+      if (step === "1") {
+        const result = copyFormTemplateInit(formCode, normalizedConfig) as TemplateCopyResult & { _serialCode?: string };
+        return ContentService.createTextOutput(JSON.stringify(result, null, 2)).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      if (step === "2") {
+        const fileId = String(payload.fileId || "").trim();
+        if (!fileId) throw new Error("step=2 需要提供 fileId");
+        if (normalizedConfig) applyContentOnlyToDoc(fileId, normalizedConfig);
+        return ContentService.createTextOutput(JSON.stringify({ ok: true }, null, 2)).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      if (step === "3") {
+        const fileId = String(payload.fileId || "").trim();
+        if (!fileId) throw new Error("step=3 需要提供 fileId");
+        if (normalizedConfig) applyMarkdownOnlyToDoc(fileId, normalizedConfig);
+        const fileUrl = `https://docs.google.com/document/d/${fileId}/edit`;
+        return ContentService.createTextOutput(JSON.stringify({ ok: true, newFileUrl: fileUrl }, null, 2)).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // 無 step：單次完成（backward compatible）
       return ContentService.createTextOutput(copyFormTemplate(formCode, normalizedConfig)).setMimeType(ContentService.MimeType.JSON);
     }
 

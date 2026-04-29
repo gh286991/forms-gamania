@@ -95,6 +95,8 @@ export type TemplateInspectionResult = {
 
 export type CopyRequestPayload = {
   action?: string;
+  step?: string | number;
+  fileId?: string;
   form?: string;
   template?: string;
   name?: string;

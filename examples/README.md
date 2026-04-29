@@ -1,24 +1,141 @@
-# A01 API Test Pack
+# A01 表單 API
 
-這包給 API 使用者測試建立 A01 表單。
+透過 HTTP POST 建立 A01 開發需求單文件，伺服器自動複製 Google Docs 範本並填入內容。
+
+---
 
 ## Endpoint
 
-```text
-https://script.google.com/macros/s/AKfycbx7Wv8uLqdJnkEID4o_Yd3qqnVnlugeDfSV9LiCm2JWV7AmX2NtF_eyERogYozF1QmI/exec
+```
+POST https://script.google.com/macros/s/AKfycbx7Wv8uLqdJnkEID4o_Yd3qqnVnlugeDfSV9LiCm2JWV7AmX2NtF_eyERogYozF1QmI/exec
 ```
 
-## Request
+### Headers
 
-Method: `POST`
+| Header | 值 | 說明 |
+|---|---|---|
+| `Content-Type` | `application/json` | 必填 |
+| `Authorization` | `Bearer <access_token>` | Web App 未公開時必填 |
 
-Header:
+### Request Body
 
-```text
-Content-Type: application/json
+```json
+{
+  "action": "copy_form",
+  "form": "a01",
+  "a01": { ... }
+}
 ```
 
-Body:
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `action` | `string` | 固定填 `"copy_form"` |
+| `form` | `string` | 表單代碼，目前支援 `"a01"` |
+| `a01` | `object` | 表單內容，見下方欄位說明 |
+
+### Response
+
+**成功**
+
+```json
+{
+  "ok": true,
+  "newFileUrl": "https://docs.google.com/document/d/xxx/edit"
+}
+```
+
+**失敗**
+
+```json
+{
+  "ok": false,
+  "error": "錯誤說明"
+}
+```
+
+---
+
+## a01 欄位說明
+
+伺服器會將這些欄位自動轉換成文件佔位符，不需要直接維護 `{{...}}` 格式。
+
+### 基本資訊
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|:---:|---|
+| `date` | `string` | ✓ | 日期，格式 `YYYY-MM-DD` |
+| `product` | `string` | ✓ | 需求產品名稱 |
+| `productContact` | `string` | ✓ | 產品窗口姓名 |
+| `devLead` | `string` | ✓ | 開發負責人姓名 |
+| `signDevLead` | `string[]` | ✓ | 負責人簽核欄，通常與 `devLead` 相同，可多人 |
+| `item` | `string` | ✓ | 上版項目說明，同時作為文件檔名的一部分 |
+| `jira` | `string` | | JIRA 票號，例如 `GXY-1234` |
+| `description` | `string` | ✓ | 變更說明 |
+
+### 簽核人員
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|:---:|---|
+| `signer` | `string[]` | ✓ | 經辦人員，可多人 |
+| `tester` | `string[]` | ✓ | 測試人員，可多人 |
+| `productOwner` | `string[]` | ✓ | 產品負責人，可多人 |
+| `manager` | `string[]` | ✓ | 部門主管，可多人 |
+
+### 變更類型
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `type.newFeature` | `boolean` | 新增功能 |
+| `type.modifyFeature` | `boolean` | 修改既有功能 |
+
+兩者皆可同時為 `true`。`true` → ⬛，`false` → ⬚。
+
+### 影響範圍
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `changeArea.api` | `boolean` | API |
+| `changeArea.sdk` | `boolean` | SDK |
+| `changeArea.backend` | `boolean` | 後台 |
+| `changeArea.dataCenter` | `boolean` | 數據中心 |
+| `changeArea.database` | `boolean` | 資料庫 |
+| `changeArea.other` | `boolean` | 其他 |
+
+### 機敏資訊
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `sensitive.mode` | `"none"` \| `"partial"` | `none`：無涉及；`partial`：涉及部分資訊 |
+| `sensitive.detail` | `string` | `mode` 為 `partial` 時填寫說明 |
+
+### 資安架構
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `security.mode` | `"existing"` \| `"extra"` | `existing`：按照既有架構；`extra`：額外套用條件 |
+| `security.detail` | `string` | `mode` 為 `extra` 時填寫說明 |
+
+### 版本紀錄
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|:---:|---|
+| `versionRows` | `object[]` | ✓ | 版本紀錄，至少一筆，自動展開成表格多列 |
+| `versionRows[].date` | `string` | ✓ | 日期，格式 `YYYY-MM-DD` |
+| `versionRows[].code` | `string` | ✓ | 版本號，例如 `V1.0` |
+| `versionRows[].person` | `string` | ✓ | 修改人員 |
+| `versionRows[].desc` | `string` | ✓ | 修改說明 |
+
+### 系統規格書
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `specMarkdown` | `string` \| `string[]` | Markdown 內容；傳陣列時多份以分隔線串接 |
+
+支援標題、段落、清單、表格、程式碼區塊等標準 Markdown，伺服器以 rich 模式渲染成 Google Docs 格式。
+
+---
+
+## 完整 Request 範例
 
 ```json
 {
@@ -58,116 +175,92 @@ Body:
       "detail": ""
     },
     "versionRows": [
-      {
-        "date": "2026-04-24",
-        "code": "V1.0",
-        "person": "Tom",
-        "desc": "初版"
-      }
+      { "date": "2026-04-24", "code": "V1.0", "person": "Tom", "desc": "初版" }
     ],
-    "specMarkdown": "# 系統規格書\n\n這裡可放 Markdown 內容。"
+    "specMarkdown": "# 系統規格書\n\n這裡放 Markdown 內容。"
   }
 }
 ```
 
-伺服器會自動把 `a01` 欄位轉成內部 `config`（placeholder）格式，因此 API 使用者不需要直接維護 `{{...}}` 佔位符。
+### curl 範例
 
-主要欄位對應：
-- `versionRows`：可一次傳多筆版本紀錄
-- `type` / `changeArea`：布林值會自動轉成文件中的勾選符號
-- `signer` / `tester` / `productOwner` / `manager`：陣列會自動轉成多行文字
-- `specMarkdown`：有值時會附加在「系統規格書」段落
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $(cat ~/.clasprc.json | jq -r '.tokens.default.access_token')" \
+  -d @examples/a01-content.sample.json \
+  "https://script.google.com/macros/s/AKfycbx7Wv8uLqdJnkEID4o_Yd3qqnVnlugeDfSV9LiCm2JWV7AmX2NtF_eyERogYozF1QmI/exec"
+```
 
-若你已經有舊的 `config.replaceText` payload，也仍可繼續使用。
+---
 
-### 多個 MD 範本
+## 使用 call-form.mjs 腳本
 
-如果你是用 `scripts/copy-form-webapp.mjs --config` 載入本機 JSON 檔，`a01` payload 可直接指定多個 md 檔案：
+這個 repo 提供 `examples/call-form.mjs`，封裝了上述 API 呼叫，並提供進度條顯示與 Markdown 檔案讀取功能。
+
+### 事前準備
+
+**安裝 clasp 並登入 Google 帳號：**
+
+```bash
+npm install -g @google/clasp
+npx clasp login
+```
+
+登入後憑證存在 `~/.clasprc.json`，之後自動讀取，不需重新登入。也可以改用環境變數 `GOOGLE_ACCESS_TOKEN=ya29...` 帶入。
+
+### 使用方式
+
+**步驟一：複製範例內容檔**
+
+```bash
+cp examples/a01-content.sample.json examples/my-a01.json
+```
+
+**步驟二：編輯內容**
+
+填入你的資料。規格書可改用 `specMarkdownFiles` 指定檔案路徑，腳本會自動讀取並轉成 `specMarkdown` 送出：
 
 ```json
 {
   "a01": {
     "specMarkdownFiles": [
       "./templates/spec-overview.md",
-      "./templates/spec-api.md",
-      "./templates/spec-test.md"
+      "./templates/spec-api.md"
     ]
   }
 }
 ```
 
-腳本會依順序讀取這些檔案並轉成 `a01.specMarkdown` 陣列，後端會用分隔線 (`---`) 合併後寫入「系統規格書」。
+`examples/templates/` 目錄下有範例 Markdown 供參考。
 
-## Run With curl
-
-```bash
-cd examples/api
-./call-a01.sh
-```
-
-使用自訂 Web App URL：
+**步驟三：執行**
 
 ```bash
-WEBAPP_URL="https://script.google.com/macros/s/你的部署ID/exec" ./call-a01.sh
+node examples/call-form.mjs examples/my-a01.json
 ```
 
-如果 Web App 沒有開放匿名 API 呼叫，可以帶 Google OAuth access token 測試：
+腳本分三步驟執行並顯示進度條：
+
+```
+建立 A01 表單...
+複製範本 [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  13%  1.2s
+填入內容 [████████████████████░░░░░░░░░░]  65%  8.4s
+渲染規格 [██████████████████████████████] 100%  12.1s  ✅
+建立成功：https://docs.google.com/document/d/xxx/edit
+```
+
+### 自訂 Web App URL
 
 ```bash
-GOOGLE_ACCESS_TOKEN="ya29..." ./call-a01.sh
+WEBAPP_URL="https://script.google.com/macros/s/你的部署ID/exec" \
+  node examples/call-form.mjs examples/my-a01.json
 ```
 
-使用自訂 payload：
+---
 
-```bash
-./call-a01.sh ./a01-request.json
-```
+## 注意事項
 
-## Run With Node.js
-
-需要 Node.js 18 以上。
-
-```bash
-cd examples/api
-node call-a01.mjs
-```
-
-`call-a01.mjs` 會自動嘗試讀取本機 `~/.clasprc.json` 的 Google access token。若尚未登入 clasp，先執行：
-
-```bash
-npx clasp login
-```
-
-使用自訂 Web App URL：
-
-```bash
-WEBAPP_URL="https://script.google.com/macros/s/你的部署ID/exec" node call-a01.mjs
-```
-
-如果 Web App 沒有開放匿名 API 呼叫，可以帶 Google OAuth access token 測試：
-
-```bash
-GOOGLE_ACCESS_TOKEN="ya29..." node call-a01.mjs
-```
-
-## Success Response
-
-成功時會回傳：
-
-```json
-{
-  "ok": true,
-  "newFileUrl": "https://docs.google.com/document/d/xxx/edit"
-}
-```
-
-`newFileUrl` 就是新建立的 A01 文件。
-
-## Notes
-
-- 表單種類由 body 裡的 `"form": "a01"` 決定。
-- 之後若新增 A02，可用同一個 URL，body 改成 `"form": "a02"`。
-- 如果 Web App 部署為 `Execute as: Me`，建立文件會使用部署者的 Drive 權限。
-- 如果要讓沒有 Google OAuth 的外部 API 直接呼叫，Web App access 必須開成可公開呼叫，例如 `Anyone`。
-- 如果部署為公司內部或需要登入，命令列 API 不會自動帶瀏覽器登入狀態，必須改帶 `GOOGLE_ACCESS_TOKEN`。
-- Node.js 範例會自動嘗試讀取 `~/.clasprc.json`；curl 範例不會，curl 需要手動帶 `GOOGLE_ACCESS_TOKEN`。
+- 若 Web App 部署設為非公開，需提供有效的 `Authorization` header，否則回傳非 JSON 錯誤。
+- 若 Web App 設為 `Execute as: Me`，建立的文件會在部署者的 Drive 下。
+- Node.js 18 以上。
