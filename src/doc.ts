@@ -180,6 +180,28 @@ export function collectBodyLines(body: GoogleAppsScript.Document.Body): string[]
   return lines;
 }
 
+export function readElementsAsMarkdown(body: GoogleAppsScript.Document.Body): string {
+  const lines: string[] = [];
+  for (let i = 0; i < body.getNumChildren(); i += 1) {
+    const child = body.getChild(i);
+    const type = child.getType();
+    if (type === DocumentApp.ElementType.TABLE) continue;
+    const line = serializeElementAsMarkdown(child);
+    if (line !== null) lines.push(line);
+  }
+  return lines.join("\n\n").trim();
+}
+
+export function readCellAsMarkdown(cell: GoogleAppsScript.Document.TableCell): string {
+  const lines: string[] = [];
+  for (let i = 0; i < cell.getNumChildren(); i += 1) {
+    const child = cell.getChild(i);
+    const line = serializeElementAsMarkdown(child);
+    if (line !== null) lines.push(line);
+  }
+  return lines.join("\n\n").trim();
+}
+
 export function extractPlaceholdersFromLine(line: string): string[] {
   const curly = line.match(/\{\{[^{}]+\}\}/g) || [];
   const bracket = line.match(/【[^【】]+】/g) || [];
@@ -367,6 +389,98 @@ function collectElementLines(element: GoogleAppsScript.Document.Element): string
     return lines;
   }
   return [];
+}
+
+function serializeElementAsMarkdown(element: GoogleAppsScript.Document.Element): string | null {
+  const type = element.getType();
+  if (type === DocumentApp.ElementType.PARAGRAPH) {
+    const paragraph = element.asParagraph();
+    const text = extractStyledMarkdownFromContainer(paragraph).trim();
+    if (!text) return "";
+    const heading = paragraph.getHeading();
+    if (heading === DocumentApp.ParagraphHeading.HEADING1) return `# ${text}`;
+    if (heading === DocumentApp.ParagraphHeading.HEADING2) return `## ${text}`;
+    if (heading === DocumentApp.ParagraphHeading.HEADING3) return `### ${text}`;
+    if (heading === DocumentApp.ParagraphHeading.HEADING4) return `#### ${text}`;
+    return text;
+  }
+  if (type === DocumentApp.ElementType.LIST_ITEM) {
+    const item = element.asListItem();
+    const text = extractStyledMarkdownFromContainer(item).trim();
+    if (!text) return "";
+    const glyph = item.getGlyphType();
+    const isOrdered = glyph === DocumentApp.GlyphType.NUMBER || glyph === DocumentApp.GlyphType.LATIN_UPPER || glyph === DocumentApp.GlyphType.LATIN_LOWER;
+    return `${isOrdered ? "1." : "-"} ${text}`;
+  }
+  return null;
+}
+
+function extractStyledMarkdownFromContainer(
+  container: GoogleAppsScript.Document.Paragraph | GoogleAppsScript.Document.ListItem
+): string {
+  let result = "";
+  for (let i = 0; i < container.getNumChildren(); i += 1) {
+    const child = container.getChild(i);
+    if (child.getType() !== DocumentApp.ElementType.TEXT) continue;
+    const text = child.asText();
+    result += textRunToMarkdown(text);
+  }
+  return result;
+}
+
+function textRunToMarkdown(text: GoogleAppsScript.Document.Text): string {
+  const raw = text.getText() || "";
+  if (!raw) return "";
+
+  let indices: number[];
+  try {
+    indices = text.getTextAttributeIndices() || [];
+  } catch {
+    return raw;
+  }
+
+  if (indices.length === 0) {
+    const [bold, italic, code] = getStyleAt(text, 0);
+    return applyMarkdownMarks(raw, bold, italic, code);
+  }
+
+  const chunks: string[] = [];
+  for (let i = 0; i < indices.length; i += 1) {
+    const start = indices[i];
+    const end = i + 1 < indices.length ? indices[i + 1] : raw.length;
+    const segment = raw.substring(start, end);
+    if (!segment) continue;
+    const [bold, italic, code] = getStyleAt(text, start);
+    chunks.push(applyMarkdownMarks(segment, bold, italic, code));
+  }
+  return chunks.join("");
+}
+
+function getStyleAt(
+  text: GoogleAppsScript.Document.Text,
+  offset: number
+): [boolean, boolean, boolean] {
+  try {
+    const bold = text.isBold(offset) === true;
+    const italic = text.isItalic(offset) === true;
+    const font = text.getFontFamily(offset) || "";
+    const code = /courier/i.test(font);
+    return [bold, italic, code];
+  } catch {
+    return [false, false, false];
+  }
+}
+
+function applyMarkdownMarks(text: string, bold: boolean, italic: boolean, code: boolean): string {
+  if (!text) return "";
+  const escaped = text
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`");
+  if (code) return `\`${escaped}\``;
+  if (bold && italic) return `***${escaped}***`;
+  if (bold) return `**${escaped}**`;
+  if (italic) return `*${escaped}*`;
+  return escaped;
 }
 
 function expandTableRows(

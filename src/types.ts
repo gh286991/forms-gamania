@@ -1,4 +1,5 @@
 export type DriveItemRow = {
+  id: string;
   name: string;
   mimeType: string;
   updatedAt: string;

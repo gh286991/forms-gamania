@@ -42,10 +42,10 @@ const CURL_EXAMPLE = `curl -X POST \\
   -d @examples/a01-content.sample.json \\
   "${ENDPOINT_URL}"`;
 
-const SCRIPT_EXAMPLE = `# 步驟一：複製範例內容檔
+const SCRIPT_EXAMPLE = `# 步驟一：複製範例
 cp examples/a01-content.sample.json examples/my-a01.json
 
-# 步驟二：編輯 my-a01.json，填入你的資料
+# 步驟二：編輯 my-a01.json 填入資料
 
 # 步驟三：執行
 node examples/call-form.mjs examples/my-a01.json`;
@@ -69,7 +69,7 @@ type FieldRow = {
   field: string;
   type: string;
   required?: boolean;
-  desc: string;
+  desc: React.ReactNode;
 };
 
 const BASIC_FIELDS: FieldRow[] = [
@@ -105,13 +105,13 @@ const CHANGE_AREA_FIELDS: FieldRow[] = [
 ];
 
 const SENSITIVE_FIELDS: FieldRow[] = [
-  { field: "sensitive.mode", type: '"none" | "partial"', desc: "none：無涉及；partial：涉及部分資訊" },
-  { field: "sensitive.detail", type: "string", desc: "mode 為 partial 時填寫說明" },
+  { field: "sensitive.mode", type: '"none" | "partial"', desc: 'none：無涉及；partial：涉及部分資訊' },
+  { field: "sensitive.detail", type: "string", desc: 'mode 為 partial 時填寫說明' },
 ];
 
 const SECURITY_FIELDS: FieldRow[] = [
-  { field: "security.mode", type: '"existing" | "extra"', desc: "existing：按照既有架構；extra：額外套用條件" },
-  { field: "security.detail", type: "string", desc: "mode 為 extra 時填寫說明" },
+  { field: "security.mode", type: '"existing" | "extra"', desc: 'existing：按照既有架構；extra：額外套用條件' },
+  { field: "security.detail", type: "string", desc: 'mode 為 extra 時填寫說明' },
 ];
 
 const VERSION_FIELDS: FieldRow[] = [
@@ -165,6 +165,43 @@ function FieldTable({ title, fields }: { title: string; fields: FieldRow[] }) {
   );
 }
 
+// JSON syntax highlighting
+function renderJsonHighlight(json: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(true|false|null)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],])|(\s+|[^\S\n]*\n[^\S\n]*)/g;
+  let last = 0;
+  let idx = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(json)) !== null) {
+    if (m.index > last) {
+      parts.push(<React.Fragment key={idx++}>{json.slice(last, m.index)}</React.Fragment>);
+    }
+    if (m[1] !== undefined) {
+      if (m[2]) {
+        parts.push(<span key={idx++} style={{ color: "#79b8ff" }}>{m[1]}</span>);
+        parts.push(<span key={idx++} style={{ color: "#e1e4e8" }}>{m[2]}</span>);
+      } else {
+        parts.push(<span key={idx++} style={{ color: "#9ecbff" }}>{m[1]}</span>);
+      }
+    } else if (m[3]) {
+      parts.push(<span key={idx++} style={{ color: "#f97583" }}>{m[3]}</span>);
+    } else if (m[4]) {
+      parts.push(<span key={idx++} style={{ color: "#ffab70" }}>{m[4]}</span>);
+    } else if (m[5]) {
+      parts.push(<span key={idx++} style={{ color: "#e1e4e8" }}>{m[5]}</span>);
+    } else {
+      parts.push(<React.Fragment key={idx++}>{m[0]}</React.Fragment>);
+    }
+    last = re.lastIndex;
+  }
+
+  if (last < json.length) {
+    parts.push(<React.Fragment key={idx++}>{json.slice(last)}</React.Fragment>);
+  }
+  return parts;
+}
+
 function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -174,6 +211,8 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
       setTimeout(() => setCopied(false), 1500);
     });
   }
+
+  const content = lang === "json" ? renderJsonHighlight(code) : code;
 
   return (
     <div className="relative my-2">
@@ -193,7 +232,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
         className="m-0 rounded-lg bg-[#1e2433] text-[#f4f7ff] overflow-x-auto text-[12.5px] leading-relaxed"
         style={{ padding: lang ? "30px 14px 14px" : "14px" }}
       >
-        <code className="font-mono">{code}</code>
+        <code className="font-mono">{content}</code>
       </pre>
     </div>
   );
@@ -226,7 +265,6 @@ function Hint({ children }: { children: React.ReactNode }) {
 export function ApiDocView({ onBack }: { onBack: () => void }) {
   return (
     <div className="relative">
-      {/* ── 主內容，置中 ── */}
       <div className="max-w-5xl mx-auto px-6 py-2">
 
         <button
@@ -258,6 +296,25 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
           </a>
         </div>
 
+        {/* ── 0. 快速開始 ── */}
+        <Section id="quickstart" title="快速開始">
+          <ol className="m-0 pl-5 text-[14px] leading-[2] text-gray-700 list-decimal">
+            <li>
+              <strong>開啟網頁</strong>　開啟此 Web App 網址，確認頁面正常載入。
+            </li>
+            <li>
+              <strong>授權 Google 帳號</strong>　點選頁面上方的授權提示，同意存取 Google Drive / Docs 權限。
+            </li>
+            <li>
+              <strong>登入 clasp</strong>　在終端機執行以下指令，完成一次性登入；之後 API 呼叫會自動帶入憑證：
+              <CodeBlock lang="bash" code={`npm install -g @google/clasp\nnpx clasp login`} />
+            </li>
+            <li>
+              <strong>開始使用</strong>　參考下方 <a href="#examples" className="text-[#0a66c2] hover:underline">使用範例</a> 呼叫 API，或直接使用網頁介面建立表單。
+            </li>
+          </ol>
+        </Section>
+
         {/* ── 1. API 概覽 ── */}
         <Section id="overview" title="API 概覽">
           <CodeBlock code={`POST ${ENDPOINT_URL}`} />
@@ -281,7 +338,7 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
                 <tr className="bg-gray-50">
                   <td className={TD_CLS}><InlineCode>Authorization</InlineCode></td>
                   <td className={TD_CLS}><InlineCode>{"Bearer <access_token>"}</InlineCode></td>
-                  <td className={TD_CLS}>Web App 未公開時必填</td>
+                  <td className={TD_CLS}>Web App 非公開時必填</td>
                 </tr>
               </tbody>
             </table>
@@ -321,7 +378,10 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
                 <tr>
                   <td className={TD_CLS}><InlineCode>a01</InlineCode></td>
                   <td className={TD_CLS}><InlineCode>object</InlineCode></td>
-                  <td className={TD_CLS}>表單內容，見下方欄位說明</td>
+                  <td className={TD_CLS}>
+                    表單內容，見{" "}
+                    <a href="#fields-a01" className="text-[#0a66c2] hover:underline">欄位說明 → A01</a>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -350,29 +410,21 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
 
         {/* ── 4. 欄位說明 ── */}
         <Section id="fields" title="欄位說明">
-
-          {/* A01 */}
           <div id="fields-a01" className="pl-3 border-l-[3px] border-[#0a66c2] mb-2">
             <span className="text-[15px] font-semibold text-[#154273]">A01 — 開發需求單</span>
           </div>
-          <Hint>
-            伺服器會將這些欄位自動轉換成文件佔位符，不需要直接維護 <InlineCode>{"{{...}}"}</InlineCode> 格式。
-          </Hint>
 
           <FieldTable title="基本資訊" fields={BASIC_FIELDS} />
           <FieldTable title="簽核人員" fields={SIGNER_FIELDS} />
           <FieldTable title="變更類型" fields={CHANGE_TYPE_FIELDS} />
           <Hint>
-            兩者皆可同時為 <InlineCode>true</InlineCode>。<InlineCode>true</InlineCode> → ⬛，<InlineCode>false</InlineCode> → ⬚。
+            <InlineCode>true</InlineCode> → ⬛，<InlineCode>false</InlineCode> → ⬚。兩者可同時為 <InlineCode>true</InlineCode>。
           </Hint>
           <FieldTable title="影響範圍" fields={CHANGE_AREA_FIELDS} />
           <FieldTable title="機敏資訊" fields={SENSITIVE_FIELDS} />
           <FieldTable title="資安架構" fields={SECURITY_FIELDS} />
           <FieldTable title="版本紀錄" fields={VERSION_FIELDS} />
           <FieldTable title="系統規格書" fields={SPEC_FIELDS} />
-          <Hint>
-            支援標題、段落、清單、表格、程式碼區塊等標準 Markdown，伺服器以 rich 模式渲染成 Google Docs 格式。
-          </Hint>
         </Section>
 
         {/* ── 5. 使用範例 ── */}
@@ -388,26 +440,15 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
 
           <SubSection id="example-script" title="使用 call-form.mjs 腳本">
             <p className="text-[14px] text-gray-700 leading-relaxed mb-2">
-              此 repo 提供 <InlineCode>examples/call-form.mjs</InlineCode>，封裝了上述 API 呼叫，並提供進度條顯示與 Markdown 檔案讀取功能。
+              此 repo 提供 <InlineCode>examples/call-form.mjs</InlineCode>，封裝 API 呼叫並提供進度條顯示與 Markdown 檔案讀取。
             </p>
 
-            <p className="text-[13px] font-semibold text-gray-600 mb-1">事前準備</p>
-            <p className="text-[14px] text-gray-700 mb-1">安裝 clasp 並登入 Google 帳號：</p>
-            <CodeBlock lang="bash" code={`npm install -g @google/clasp\nnpx clasp login`} />
-            <Hint>
-              登入後憑證存在 <InlineCode>~/.clasprc.json</InlineCode>，之後自動讀取，不需重新登入。
-              也可以改用環境變數 <InlineCode>GOOGLE_ACCESS_TOKEN=ya29...</InlineCode> 帶入。
-            </Hint>
-
-            <p className="text-[13px] font-semibold text-gray-600 mt-4 mb-1">使用方式</p>
             <CodeBlock lang="bash" code={SCRIPT_EXAMPLE} />
-            <p className="text-[14px] text-gray-700 my-2">腳本分三步驟執行並顯示進度條：</p>
             <CodeBlock code={PROGRESS_EXAMPLE} />
 
             <p className="text-[13px] font-semibold text-gray-600 mt-4 mb-1">specMarkdownFiles</p>
             <p className="text-[14px] text-gray-700 mb-1">
-              規格書可改用 <InlineCode>specMarkdownFiles</InlineCode> 指定檔案路徑，腳本會自動讀取並轉成{" "}
-              <InlineCode>specMarkdown</InlineCode> 送出：
+              規格書可用 <InlineCode>specMarkdownFiles</InlineCode> 指定檔案路徑，腳本自動讀取並轉成 <InlineCode>specMarkdown</InlineCode>：
             </p>
             <CodeBlock lang="json" code={SPEC_FILES_EXAMPLE} />
 
@@ -422,21 +463,22 @@ export function ApiDocView({ onBack }: { onBack: () => void }) {
         {/* ── 6. 注意事項 ── */}
         <Section id="notes" title="注意事項">
           <ul className="m-0 pl-5 text-[14px] leading-[1.8] text-gray-700">
-            <li className="mb-1.5">若 Web App 部署設為非公開，需提供有效的 <InlineCode>Authorization</InlineCode> header，否則回傳非 JSON 錯誤。</li>
-            <li className="mb-1.5">若 Web App 設為 <InlineCode>Execute as: Me</InlineCode>，建立的文件會在部署者的 Drive 下。</li>
-            <li>Node.js 18 以上。</li>
+            <li className="mb-1.5">Web App 非公開時，需提供有效的 <InlineCode>Authorization</InlineCode> header，否則回傳非 JSON 錯誤。</li>
+            <li className="mb-1.5">部署設為 <InlineCode>Execute as: Me</InlineCode> 時，建立的文件會在部署者的 Drive 下。</li>
+            <li>需要 Node.js 18 以上。</li>
           </ul>
         </Section>
 
       </div>
 
-      {/* ── 懸浮目錄，fixed 貼右 ── */}
+      {/* ── 懸浮目錄 ── */}
       <nav
         aria-label="頁面導覽"
         className="fixed right-6 top-6 w-48 bg-white border border-gray-200 rounded-lg px-4 py-3.5 max-h-[calc(100vh-48px)] overflow-auto z-10 shadow-sm"
       >
         <p className="text-[13px] font-semibold text-gray-500 mb-2 mt-0">目錄</p>
         <ul className="m-0 pl-3.5 list-disc marker:text-gray-300">
+          <li className="my-1 text-[12px]"><a href="#quickstart" className="text-[#0a66c2] no-underline hover:underline leading-snug">快速開始</a></li>
           <li className="my-1 text-[12px]"><a href="#overview" className="text-[#0a66c2] no-underline hover:underline leading-snug">API 概覽</a></li>
           <li className="my-1 text-[12px]"><a href="#request" className="text-[#0a66c2] no-underline hover:underline leading-snug">Request 格式</a></li>
           <li className="my-1 text-[12px]"><a href="#response" className="text-[#0a66c2] no-underline hover:underline leading-snug">Response</a></li>

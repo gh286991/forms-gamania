@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { DriveAuthState, FormValues, MessageState, SharedUser, VersionRow } from "../types";
 import type { CopyResponse } from "../types";
+import type { A01DocReadResponse } from "../types";
 import { callGas } from "../utils/callGas";
 import { parseJsonMaybe, toSlashDate, toPlainText, toChineseName } from "../utils/helpers";
-import { inlineMarkdown } from "../utils/markdown";
 import { SearchableSelect, MultiSearchableSelect } from "./SearchableSelect";
+import { RichTextEditor } from "./RichTextEditor";
 
 const MARKDOWN_DEFAULT = "# 系統規格書\n\n請在此輸入規格內容。";
 
@@ -19,8 +20,6 @@ const TEXT_INPUT =
   "w-full border-0 border-b border-b-[#aaa] bg-transparent font-[inherit] text-[13px] py-[2px] px-1 outline-none transition-colors focus:border-b-[#0a66c2] focus:bg-[#f0f6ff]";
 const DATE_INPUT =
   "w-auto border-0 border-b border-b-[#aaa] bg-transparent font-[inherit] text-[13px] py-[2px] px-1 outline-none";
-const TEXTAREA_CLS =
-  "w-full resize-y min-h-[80px] border border-[#ccc] rounded-[3px] py-1.5 px-2 bg-transparent font-[inherit] text-[13px] outline-none transition-colors focus:border-[#0a66c2]";
 const CHECK_LABEL =
   "flex items-center gap-[5px] cursor-pointer whitespace-nowrap";
 const CHECK_INPUT = "!w-auto border-none accent-[#0a66c2] cursor-pointer";
@@ -28,11 +27,15 @@ const CHECK_INPUT = "!w-auto border-none accent-[#0a66c2] cursor-pointer";
 export function A01FormPage({
   authState,
   onRefreshAuth,
-  onBack
+  onBack,
+  editFileId,
+  editFileName
 }: {
   authState: DriveAuthState;
   onRefreshAuth: () => void;
   onBack: () => void;
+  editFileId?: string;
+  editFileName?: string;
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [activeTab, setActiveTab] = useState<"form" | "spec">("form");
@@ -40,6 +43,7 @@ export function A01FormPage({
   const [result, setResult] = useState<MessageState>({ kind: "none", text: "" });
   const [specFileName, setSpecFileName] = useState("");
   const [specMarkdown, setSpecMarkdown] = useState(MARKDOWN_DEFAULT);
+  const [loadingDoc, setLoadingDoc] = useState(false);
   const [form, setForm] = useState<FormValues>({
     date: today,
     product: "",
@@ -70,6 +74,7 @@ export function A01FormPage({
 
   const [sharedUsers, setSharedUsers] = useState<SharedUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const isEditMode = Boolean(editFileId);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +91,44 @@ export function A01FormPage({
     warmUp();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!editFileId) return;
+    let cancelled = false;
+
+    async function loadDoc() {
+      setLoadingDoc(true);
+      setResult({ kind: "none", text: "" });
+      try {
+        const raw = await callGas<string>((runner) => {
+          (runner as any).readA01DocFields(editFileId);
+        });
+        if (cancelled) return;
+        const parsed = parseJsonMaybe<A01DocReadResponse>(raw);
+        if (!parsed?.ok || !parsed.form) {
+          setResult({ kind: "error", text: parsed?.error || "讀取文件內容失敗" });
+          return;
+        }
+        setForm({
+          ...parsed.form,
+          versionRows: parsed.form.versionRows?.length
+            ? parsed.form.versionRows
+            : [{ date: today, code: "V1.0", person: "", desc: "初版" }]
+        });
+        setSpecMarkdown(parsed.specMarkdown || "");
+      } catch (error) {
+        if (cancelled) return;
+        setResult({ kind: "error", text: error instanceof Error ? error.message : String(error) });
+      } finally {
+        if (!cancelled) setLoadingDoc(false);
+      }
+    }
+
+    loadDoc();
+    return () => {
+      cancelled = true;
+    };
+  }, [editFileId, today]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,8 +159,6 @@ export function A01FormPage({
     return () => { cancelled = true; };
   }, []);
 
-const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
-
   function setValue<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -145,7 +186,7 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
 
   async function submitForm() {
     if (!authState.checked || authState.status !== "ok") {
-      setResult({ kind: "error", text: "請先完成 Drive 授權後再建立文件。" });
+      setResult({ kind: "error", text: "請先完成 Drive 授權後再操作文件。" });
       onRefreshAuth();
       return;
     }
@@ -159,7 +200,6 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
         "{{開發負責人S}}": form.signDevLead.map(toChineseName).join("\n"),
         "{{項目}}": toPlainText(form.item),
         "{{JIRA}}": toPlainText(form.jira),
-        "{{說明}}": toPlainText(form.description),
         "{{經辦}}": form.signer.map(toChineseName).join("\n"),
         "{{測試人員確認}}": form.tester.map(toChineseName).join("\n"),
         "{{產品負責人}}": form.productOwner.map(toChineseName).join("\n"),
@@ -191,6 +231,14 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
       ])
     }];
 
+    if ((form.description || "").trim()) {
+      config.markdownRenderMode = "rich";
+      config.markdownReplace = {
+        ...(config.markdownReplace as Record<string, unknown> || {}),
+        "{{說明}}": String(form.description)
+      };
+    }
+
     if ((specMarkdown || "").trim()) {
       config.markdownRenderMode = "rich";
       config.markdownSections = [{ title: "系統規格書", content: String(specMarkdown) }];
@@ -200,18 +248,30 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
     setResult({ kind: "none", text: "" });
     try {
       const raw = await callGas<string>((runner) => {
+        if (isEditMode && editFileId) {
+          (runner as any).updateA01Doc(editFileId, config);
+          return;
+        }
         (runner as any).copyFormTemplate("a01", config);
       });
       const parsed = parseJsonMaybe<CopyResponse>(raw);
       const success =
         (typeof parsed === "object" && parsed !== null && (parsed as CopyResponse).newFileUrl) ||
-        (typeof raw === "string" && raw.indexOf("newFileUrl") >= 0);
+        (typeof raw === "string" && (raw.indexOf("newFileUrl") >= 0 || raw.indexOf('"ok":true') >= 0));
 
       if (success && parsed && "newFileUrl" in parsed && parsed.newFileUrl) {
         setResult({
           kind: "success",
-          text: `建立成功：${parsed.newName || "文件已建立"}`,
+          text: isEditMode
+            ? `儲存成功：${editFileName || "文件已更新"}`
+            : `建立成功：${parsed.newName || "文件已建立"}`,
           url: parsed.newFileUrl
+        });
+      } else if (success && isEditMode) {
+        setResult({
+          kind: "success",
+          text: `儲存成功：${editFileName || "文件已更新"}`,
+          url: editFileId ? `https://docs.google.com/document/d/${editFileId}/edit` : undefined
         });
       } else {
         const errorMessage =
@@ -245,8 +305,24 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
   return (
     <section className="max-w-[900px] mx-auto mt-8 px-4 pb-[60px]">
       <button className="back-btn" type="button" onClick={onBack}>
-        ← 返回選單
+        ← {isEditMode ? "返回文件列表" : "返回選單"}
       </button>
+
+      {isEditMode && loadingDoc && (
+        <div className="loading-overlay">
+          <div className="loading-card">
+            <div className="loading-spinner" />
+            <div className="loading-text">讀取文件內容中</div>
+            <div className="loading-sub">{editFileName || editFileId}</div>
+          </div>
+        </div>
+      )}
+
+      {isEditMode && !loadingDoc ? (
+        <div className="meta-line mb-3">
+          編輯文件：{editFileName || editFileId}
+        </div>
+      ) : null}
 
       <div className="flex gap-2 mb-3.5">
         <button
@@ -605,11 +681,11 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
                 <tr>
                   <td className={FIELD_LABEL}>說明</td>
                   <td className={TD}>
-                    <textarea
+                    <RichTextEditor
                       value={form.description}
-                      onChange={(e) => setValue("description", e.target.value)}
+                      onChange={(markdown) => setValue("description", markdown)}
                       placeholder="需求說明內容"
-                      className={TEXTAREA_CLS}
+                      minHeight="220px"
                     />
                   </td>
                 </tr>
@@ -684,19 +760,19 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
                 type="button"
                 className="bg-[#0a66c2] text-white border-none rounded-md py-[13px] px-12 text-[15px] cursor-pointer font-[inherit] tracking-[1px] transition-colors hover:bg-[#084e99] disabled:bg-[#aaa] disabled:cursor-not-allowed"
                 onClick={submitForm}
-                disabled={submitting}
+                disabled={submitting || loadingDoc}
               >
-                {submitting ? "建立中…" : "建立文件"}
+                {submitting ? (isEditMode ? "儲存中…" : "建立中…") : (isEditMode ? "儲存文件" : "建立文件")}
               </button>
             </div>
           </div>
         ) : (
           <div>
             <div className="text-left text-[20px] font-bold tracking-[4px]">
-              系統規格書（Markdown）
+              系統規格書（WYSIWYG）
             </div>
             <p className="mt-0 mb-3 text-[#5b6277] text-[13px] leading-[1.6]">
-              可直接編輯 Markdown，或上傳 `.md` 檔案。
+              可直接格式化編輯內容，或上傳 `.md` 檔案。
             </p>
 
             <div className="flex flex-wrap gap-2.5 items-center mb-3">
@@ -721,31 +797,21 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
               </span>
             </div>
 
-            <textarea
+            <RichTextEditor
               value={specMarkdown}
-              onChange={(e) => setSpecMarkdown(e.target.value)}
-              className="w-full min-h-[220px] border border-[#c8d0df] rounded-lg py-2.5 px-3 bg-white font-mono text-xs leading-[1.6] resize-y mb-3.5"
+              onChange={setSpecMarkdown}
               placeholder="# 系統規格書"
+              minHeight="300px"
             />
-
-            <div className="border border-[#d7dce8] rounded-lg bg-white overflow-hidden">
-              <div className="py-2 px-3 bg-[#f4f7fc] text-xs text-[#556] border-b border-[#e2e7f1]">
-                預覽
-              </div>
-              <div
-                className={`spec-preview${previewHtml ? "" : " empty"}`}
-                dangerouslySetInnerHTML={{ __html: previewHtml || "尚未輸入內容" }}
-              />
-            </div>
 
             <div className="mt-6 text-center">
               <button
                 type="button"
                 className="bg-[#0a66c2] text-white border-none rounded-md py-[13px] px-12 text-[15px] cursor-pointer font-[inherit] tracking-[1px] transition-colors hover:bg-[#084e99] disabled:bg-[#aaa] disabled:cursor-not-allowed"
                 onClick={submitForm}
-                disabled={submitting}
+                disabled={submitting || loadingDoc}
               >
-                {submitting ? "建立中…" : "建立文件"}
+                {submitting ? (isEditMode ? "儲存中…" : "建立中…") : (isEditMode ? "儲存文件" : "建立文件")}
               </button>
             </div>
           </div>
@@ -756,12 +822,14 @@ const previewHtml = useMemo(() => inlineMarkdown(specMarkdown), [specMarkdown]);
       <div id="result" className="mt-6">
         {result.kind === "error" ? (
           <div className="bg-[#fdecea] border border-[#ef9a9a] rounded-lg py-4 px-5 text-[#c62828] text-[14px]">
-            ❌ 建立失敗：{result.text}
+            ❌ {isEditMode ? "儲存失敗" : "建立失敗"}：{result.text}
           </div>
         ) : null}
         {result.kind === "success" ? (
           <div className="bg-[#e8f5e9] border border-[#66bb6a] rounded-lg py-6 px-7">
-            <h3 className="m-0 mb-2.5 text-[#2e7d32] text-[16px]">✅ 文件建立成功</h3>
+            <h3 className="m-0 mb-2.5 text-[#2e7d32] text-[16px]">
+              ✅ {isEditMode ? "文件儲存成功" : "文件建立成功"}
+            </h3>
             <div className="text-[13px] text-[#555] mb-4">{result.text}</div>
             {result.url ? (
               <a

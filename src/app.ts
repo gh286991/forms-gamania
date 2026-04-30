@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { FORM_REGISTRY, DEFAULT_DRIVE_PATH, MAX_FILES } from "./config";
 import { resolveTargetFolder, listCurrentLevelEntries, extractDriveFileId, getDriveApi, buildDriveFileUrl } from "./drive";
-import { hasStructuredDocConfig, applyStructuredConfigToDoc, applyContentOnlyToDoc, applyMarkdownOnlyToDoc, collectBodyLines, extractPlaceholdersFromLine, extractLabelCandidate, collectTableKeyCandidates } from "./doc";
+import { hasStructuredDocConfig, applyStructuredConfigToDoc, applyContentOnlyToDoc, applyMarkdownOnlyToDoc, collectBodyLines, extractPlaceholdersFromLine, extractLabelCandidate, collectTableKeyCandidates, readElementsAsMarkdown, readCellAsMarkdown } from "./doc";
 
 export function copyFormTemplate(formCode: string, config?: StructuredDocConfig): string {
   const entry = FORM_REGISTRY[formCode.toLowerCase()];
@@ -264,8 +264,112 @@ export function listFolderItemsCli(pathInput?: string, folderIdInput?: string): 
   }, null, 2);
 }
 
+export function listA01Files(): string {
+  const entry = FORM_REGISTRY.a01;
+  if (!entry) {
+    return JSON.stringify({ ok: false, error: "找不到 A01 設定" });
+  }
+  try {
+    const target = resolveTargetFolder(entry.targetFolderPath, "");
+    const list = listCurrentLevelEntries(target.folderId, MAX_FILES, true);
+    return JSON.stringify({
+      ok: true,
+      normalizedPath: target.normalizedPath,
+      folderId: target.folderId,
+      itemCount: list.rows.length,
+      items: list.rows
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ ok: false, error: message });
+  }
+}
+
+export function updateA01Doc(fileId: string, config?: StructuredDocConfig): string {
+  const normalizedFileId = String(fileId || "").trim();
+  if (!normalizedFileId) {
+    return JSON.stringify({ ok: false, error: "fileId 不能為空" });
+  }
+  try {
+    const report = applyStructuredConfigToDoc(normalizedFileId, {
+      ...(config || {}),
+      clearTemplate: true
+    });
+    return JSON.stringify({
+      ok: true,
+      fileId: normalizedFileId,
+      fileUrl: `https://docs.google.com/document/d/${normalizedFileId}/edit`,
+      applyReport: report
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ ok: false, error: message });
+  }
+}
+
+export function readA01DocFields(fileId: string): string {
+  const normalizedFileId = String(fileId || "").trim();
+  if (!normalizedFileId) {
+    return JSON.stringify({ ok: false, error: "fileId 不能為空" });
+  }
+  try {
+    const doc = DocumentApp.openById(normalizedFileId);
+    const fileName = doc.getName();
+    const bodies = getDocBodies(doc);
+    const mainBody = bodies[0];
+    const allText = (mainBody ? collectBodyLines(mainBody) : [])
+      .map((line) => String(line || ""))
+      .join("\n");
+    const tables = mainBody ? collectBodyTables(mainBody) : [];
+    const signoffValues = readSignoffValues(tables);
+    const descriptionMarkdown = mainBody ? readFieldMarkdownFromBody(mainBody, "說明") : "";
+
+    const form = {
+      date: normalizeDateText(readFieldValue("日期", allText, tables)),
+      product: readFieldValue("需求產品", allText, tables),
+      productContact: readFieldValue("產品窗口", allText, tables),
+      devLead: readFieldValue("開發負責人", allText, tables),
+      versionRows: readVersionRows(tables),
+      item: readFieldValue("項目", allText, tables),
+      jira: readFieldValue("JIRA", allText, tables),
+      sensitive: readCheckValue(allText, "無涉及機敏資訊", "涉及部分資訊") ? "none" : "partial",
+      sensitiveDetail: readFieldValue("涉及部分資訊說明", allText, tables),
+      security: readCheckValue(allText, "按照既有資安架構", "額外套用條件") ? "existing" : "extra",
+      securityDetail: readFieldValue("額外套用條件說明", allText, tables),
+      description: descriptionMarkdown || readFieldValue("說明", allText, tables),
+      signer: splitPeople(signoffValues["經辦"] || ""),
+      tester: splitPeople(signoffValues["測試人員確認"] || ""),
+      productOwner: splitPeople(signoffValues["產品負責人"] || ""),
+      manager: splitPeople(signoffValues["部門主管"] || ""),
+      newFeature: readCheckedMark(allText, "新增功能"),
+      modifyFeature: readCheckedMark(allText, "修改功能"),
+      api: readCheckedMark(allText, "API"),
+      sdk: readCheckedMark(allText, "SDK"),
+      backend: readCheckedMark(allText, "後台"),
+      dataCenter: readCheckedMark(allText, "數據中心"),
+      database: readCheckedMark(allText, "資料庫"),
+      other: readCheckedMark(allText, "其他"),
+      signDevLead: splitPeople(signoffValues["開發負責人"] || "")
+    };
+
+    const specMarkdown = bodies.length > 1 ? readElementsAsMarkdown(bodies[1]) : "";
+
+    doc.saveAndClose();
+    return JSON.stringify({
+      ok: true,
+      fileId: normalizedFileId,
+      fileName,
+      form,
+      specMarkdown
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return JSON.stringify({ ok: false, error: message });
+  }
+}
+
 type ReactPageContext = {
-  defaultView: "selector" | "form" | "drive";
+  defaultView: "selector" | "form" | "drive" | "file-list";
   defaultForm?: string;
   defaultPath?: string;
   defaultFolderId?: string;
@@ -319,6 +423,11 @@ export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Conte
       return ContentService.createTextOutput(JSON.stringify(result, null, 2)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (jsonMode && action === "read_doc") {
+      const fileId = (e?.parameter?.fileId || "").trim();
+      return ContentService.createTextOutput(readA01DocFields(fileId)).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // JSON-only drive query with no explicit action (including path/folderId shortcut)
     if (jsonMode) {
       const targetFolder = resolveTargetFolder(pathInput, folderIdInput);
@@ -333,6 +442,13 @@ export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Conte
     if (action === "api-doc") {
       return renderReactHtmlPage("form-selector", "API 使用說明", {
         defaultView: "selector",
+        defaultPath: pathInput,
+        defaultFolderId: folderIdInput
+      });
+    }
+    if (action === "file-list") {
+      return renderReactHtmlPage("form-selector", "A01 文件列表", {
+        defaultView: "file-list",
         defaultPath: pathInput,
         defaultFolderId: folderIdInput
       });
@@ -477,7 +593,6 @@ function buildA01StructuredConfig(input: A01ApiPayload): StructuredDocConfig {
       "{{開發負責人S}}": joinLines(input.signDevLead),
       "{{項目}}": toText(input.item),
       "{{JIRA}}": toText(input.jira),
-      "{{說明}}": toText(input.description),
       "{{經辦}}": joinLines(input.signer),
       "{{測試人員確認}}": joinLines(input.tester),
       "{{產品負責人}}": joinLines(input.productOwner),
@@ -508,10 +623,22 @@ function buildA01StructuredConfig(input: A01ApiPayload): StructuredDocConfig {
     }]
   };
 
+  const descriptionMarkdown = toMarkdown(input.description).trim();
+  if (descriptionMarkdown) {
+    config.markdownRenderMode = "rich";
+    config.markdownReplace = {
+      ...(config.markdownReplace || {}),
+      "{{說明}}": descriptionMarkdown
+    };
+  }
+
   const specMarkdown = toMarkdown(input.specMarkdown).trim();
   if (specMarkdown) {
     config.markdownRenderMode = "rich";
-    config.markdownReplace = { "{{系統規格書}}": specMarkdown };
+    config.markdownReplace = {
+      ...(config.markdownReplace || {}),
+      "{{系統規格書}}": specMarkdown
+    };
   }
 
   return config;
@@ -545,4 +672,193 @@ function toMarkdown(value: unknown): string {
       .join("\n\n---\n\n");
   }
   return toText(value);
+}
+
+function normalizeDateText(value: string): string {
+  const text = value.trim().replace(/\//g, "-");
+  const hit = text.match(/(\d{4}-\d{1,2}-\d{1,2})/);
+  if (!hit) return "";
+  const parts = hit[1].split("-");
+  const y = parts[0];
+  const m = parts[1].padStart(2, "0");
+  const d = parts[2].padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function splitPeople(value: string): string[] {
+  return value
+    .split(/\r?\n|[,，、]/)
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
+
+function readCheckedMark(fullText: string, label: string): boolean {
+  const escaped = escapeRegex(label);
+  return (
+    new RegExp(`⬛\\s*${escaped}`).test(fullText) ||
+    new RegExp(`${escaped}\\s*[：:]?\\s*⬛`).test(fullText)
+  );
+}
+
+function readCheckValue(fullText: string, trueLabel: string, falseLabel: string): boolean {
+  const trueChecked = readCheckedMark(fullText, trueLabel);
+  const falseChecked = readCheckedMark(fullText, falseLabel);
+  if (trueChecked || falseChecked) return trueChecked;
+  return true;
+}
+
+function readFieldValue(label: string, fullText: string, tables: string[][][]): string {
+  const byInline = readValueFromInlineText(label, fullText);
+  if (byInline) return byInline;
+
+  const byTable = readValueFromTables(label, tables);
+  if (byTable) return byTable;
+
+  return "";
+}
+
+function readValueFromInlineText(label: string, fullText: string): string {
+  const escaped = escapeRegex(label);
+  const match = fullText.match(new RegExp(`${escaped}\\s*[：:]\\s*([^\\n\\r]+)`));
+  return match?.[1]?.trim() || "";
+}
+
+function readValueFromTables(label: string, tables: string[][][]): string {
+  const normalizedLabel = label.replace(/\s+/g, "");
+  for (const table of tables) {
+    for (const row of table) {
+      for (let i = 0; i < row.length; i += 1) {
+        const cell = (row[i] || "").trim();
+        const compact = cell.replace(/\s+/g, "");
+        if (compact === normalizedLabel || compact === `${normalizedLabel}：` || compact === `${normalizedLabel}:`) {
+          const next = (row[i + 1] || "").trim();
+          if (next && looksLikeHeaderText(next)) continue;
+          if (next) return next;
+        }
+        const match = cell.match(new RegExp(`^${escapeRegex(label)}\\s*[：:]\\s*(.+)$`));
+        if (match?.[1]) return match[1].trim();
+      }
+    }
+  }
+  return "";
+}
+
+function looksLikeHeaderText(value: string): boolean {
+  const compact = value.replace(/\s+/g, "");
+  return ["開發負責人", "經辦", "測試人員確認", "產品負責人", "部門主管"].includes(compact);
+}
+
+function readSignoffValues(tables: string[][][]): Record<string, string> {
+  const keys = ["開發負責人", "經辦", "測試人員確認", "產品負責人", "部門主管"];
+  const emptyResult: Record<string, string> = {
+    開發負責人: "",
+    經辦: "",
+    測試人員確認: "",
+    產品負責人: "",
+    部門主管: ""
+  };
+
+  for (const table of tables) {
+    for (let rowIndex = 0; rowIndex < table.length; rowIndex += 1) {
+      const header = table[rowIndex];
+      if (!header || header.length === 0) continue;
+      const compactHeader = header.map((cell) => (cell || "").replace(/\s+/g, ""));
+      const hitCount = keys.filter((key) => compactHeader.includes(key)).length;
+      if (hitCount < 3) continue;
+
+      const valueRow = table[rowIndex + 1] || [];
+      const result = { ...emptyResult };
+      for (const key of keys) {
+        const col = compactHeader.findIndex((cell) => cell === key);
+        if (col < 0) continue;
+        result[key] = String(valueRow[col] || "").trim();
+      }
+      return result;
+    }
+  }
+
+  return emptyResult;
+}
+
+function readFieldMarkdownFromBody(body: GoogleAppsScript.Document.Body, label: string): string {
+  const normalizedLabel = label.replace(/\s+/g, "");
+  for (let i = 0; i < body.getNumChildren(); i += 1) {
+    const child = body.getChild(i);
+    if (child.getType() !== DocumentApp.ElementType.TABLE) continue;
+    const table = child.asTable();
+    for (let rowIndex = 0; rowIndex < table.getNumRows(); rowIndex += 1) {
+      const row = table.getRow(rowIndex);
+      for (let colIndex = 0; colIndex < row.getNumCells(); colIndex += 1) {
+        const keyCell = row.getCell(colIndex);
+        const keyText = keyCell.getText().replace(/\s+/g, "").replace(/[：:]+$/, "");
+        if (keyText !== normalizedLabel) continue;
+        if (colIndex + 1 >= row.getNumCells()) continue;
+        return readCellAsMarkdown(row.getCell(colIndex + 1));
+      }
+    }
+  }
+  return "";
+}
+
+function readVersionRows(tables: string[][][]): Array<{ date: string; code: string; person: string; desc: string }> {
+  for (const table of tables) {
+    const headerIndex = table.findIndex((row) => row.some((cell) => cell.includes("版本編號")));
+    if (headerIndex < 0) continue;
+    const rows: Array<{ date: string; code: string; person: string; desc: string }> = [];
+    for (let i = headerIndex + 1; i < table.length; i += 1) {
+      const row = table[i];
+      const date = normalizeDateText((row[0] || "").trim());
+      const code = (row[1] || "").trim();
+      const person = (row[2] || "").trim();
+      const desc = (row[3] || "").trim();
+      if (!date && !code && !person && !desc) continue;
+      rows.push({
+        date: date || "",
+        code: code || "V1.0",
+        person,
+        desc
+      });
+    }
+    if (rows.length > 0) return rows;
+  }
+  return [{ date: "", code: "V1.0", person: "", desc: "初版" }];
+}
+
+function collectBodyTables(body: GoogleAppsScript.Document.Body): string[][][] {
+  const tables: string[][][] = [];
+  for (let i = 0; i < body.getNumChildren(); i += 1) {
+    const child = body.getChild(i);
+    if (child.getType() !== DocumentApp.ElementType.TABLE) continue;
+    const table = child.asTable();
+    const rows: string[][] = [];
+    for (let row = 0; row < table.getNumRows(); row += 1) {
+      const tableRow = table.getRow(row);
+      const cells: string[] = [];
+      for (let col = 0; col < tableRow.getNumCells(); col += 1) {
+        cells.push(tableRow.getCell(col).getText().trim());
+      }
+      rows.push(cells);
+    }
+    tables.push(rows);
+  }
+  return tables;
+}
+
+function getDocBodies(doc: GoogleAppsScript.Document.Document): GoogleAppsScript.Document.Body[] {
+  try {
+    const docWithTabs = doc as unknown as {
+      getTabs(): Array<{ asDocumentTab(): { getBody(): GoogleAppsScript.Document.Body } }>;
+    };
+    const tabs = docWithTabs.getTabs();
+    if (Array.isArray(tabs) && tabs.length > 0) {
+      return tabs.map((tab) => tab.asDocumentTab().getBody());
+    }
+  } catch {
+    // Ignore tab API errors and fallback to getBody.
+  }
+  return [doc.getBody()];
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

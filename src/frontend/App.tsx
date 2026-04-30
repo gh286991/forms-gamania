@@ -4,6 +4,7 @@ import { SelectorView } from "./components/SelectorView";
 import { DriveView } from "./components/DriveView";
 import { A01FormPage } from "./components/A01FormPage";
 import { ApiDocView } from "./components/ApiDocView";
+import { FileListView } from "./components/FileListView";
 import { StartupScreen } from "./components/StartupScreen";
 import { callGas } from "./utils/callGas";
 import { parseAuthMessage, buildAuthErrorState, toPlainText } from "./utils/helpers";
@@ -14,12 +15,19 @@ function getInitialRoute(context: AppContext = {}): RouteState {
   const form = (params.get("form") || "").toLowerCase();
   const path = (params.get("path") || context.defaultPath || "").trim();
   const folderId = (params.get("folderId") || context.defaultFolderId || "").trim();
+  const fileId = (params.get("fileId") || "").trim();
+  const fileName = (params.get("fileName") || "").trim();
 
   if (action === "api-doc") {
     return { view: "api-doc", formCode: "", path, folderId };
   }
+  if (action === "file-list") {
+    return { view: "file-list", formCode: "", path, folderId };
+  }
   if ((action === "form" || form === "a01") && form) {
-    if (form === "a01") return { view: "form", formCode: "a01", path, folderId };
+    if (form === "a01") {
+      return { view: "form", formCode: "a01", path, folderId, editFileId: fileId, editFileName: fileName };
+    }
     return { view: "selector", formCode: form, path, folderId };
   }
   if (action === "drive" || params.get("path") || params.get("folderId")) {
@@ -27,6 +35,9 @@ function getInitialRoute(context: AppContext = {}): RouteState {
   }
   if (context.defaultView === "form" && context.defaultForm === "a01") {
     return { view: "form", formCode: "a01", path, folderId };
+  }
+  if (context.defaultView === "file-list") {
+    return { view: "file-list", formCode: "", path, folderId };
   }
   return {
     view: context.defaultView === "drive" ? "drive" : "selector",
@@ -50,11 +61,24 @@ function useSyncUrl(route: RouteState) {
         url.searchParams.delete("form");
         url.searchParams.delete("path");
         url.searchParams.delete("folderId");
+        url.searchParams.delete("fileId");
+        url.searchParams.delete("fileName");
+      } else if (route.view === "file-list") {
+        url.searchParams.set("action", "file-list");
+        url.searchParams.delete("form");
+        url.searchParams.delete("path");
+        url.searchParams.delete("folderId");
+        url.searchParams.delete("fileId");
+        url.searchParams.delete("fileName");
       } else if (route.view === "form") {
         url.searchParams.set("action", "form");
         url.searchParams.set("form", route.formCode);
         url.searchParams.delete("path");
         url.searchParams.delete("folderId");
+        if (route.editFileId) url.searchParams.set("fileId", route.editFileId);
+        else url.searchParams.delete("fileId");
+        if (route.editFileName) url.searchParams.set("fileName", route.editFileName);
+        else url.searchParams.delete("fileName");
       } else {
         if (route.path) url.searchParams.set("path", route.path);
         else url.searchParams.delete("path");
@@ -62,6 +86,8 @@ function useSyncUrl(route: RouteState) {
         else url.searchParams.delete("folderId");
         url.searchParams.set("action", "drive");
         url.searchParams.delete("form");
+        url.searchParams.delete("fileId");
+        url.searchParams.delete("fileName");
       }
       window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     } catch {
@@ -114,7 +140,15 @@ export function App() {
 
   function openSelector() {
     setSelectorError("");
-    setRoute({ ...route, view: "selector", formCode: "", path: route.path, folderId: route.folderId });
+    setRoute({
+      ...route,
+      view: "selector",
+      formCode: "",
+      path: route.path,
+      folderId: route.folderId,
+      editFileId: "",
+      editFileName: ""
+    });
   }
 
   function openApiDoc() {
@@ -134,7 +168,31 @@ export function App() {
       return;
     }
     setSelectorError("");
-    setRoute({ ...route, view: "form", formCode: "a01", path: route.path, folderId: route.folderId });
+    setRoute({
+      ...route,
+      view: "form",
+      formCode: "a01",
+      path: route.path,
+      folderId: route.folderId,
+      editFileId: "",
+      editFileName: ""
+    });
+  }
+
+  function openFileList() {
+    setSelectorError("");
+    setRoute({ ...route, view: "file-list", formCode: "", editFileId: "", editFileName: "" });
+  }
+
+  function openEditForm(fileId: string, fileName: string) {
+    setSelectorError("");
+    setRoute({
+      ...route,
+      view: "form",
+      formCode: "a01",
+      editFileId: fileId,
+      editFileName: fileName
+    });
   }
 
   return (
@@ -145,6 +203,13 @@ export function App() {
           onOpenForm={openForm}
           onOpenDrive={openDrive}
           onOpenApiDoc={openApiDoc}
+          onOpenFileList={openFileList}
+        />
+      ) : null}
+      {route.view === "file-list" ? (
+        <FileListView
+          onBack={openSelector}
+          onOpenEdit={openEditForm}
         />
       ) : null}
       {route.view === "drive" ? (
@@ -161,7 +226,9 @@ export function App() {
         <A01FormPage
           authState={authState}
           onRefreshAuth={refreshDriveAuth}
-          onBack={openSelector}
+          onBack={route.editFileId ? openFileList : openSelector}
+          editFileId={route.editFileId}
+          editFileName={route.editFileName}
         />
       ) : null}
     </main>

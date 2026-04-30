@@ -1,4 +1,4 @@
-export type AppView = "selector" | "form" | "drive" | "api-doc";
+export type AppView = "selector" | "form" | "drive" | "api-doc" | "file-list";
 
 export type AppContext = {
   defaultView?: AppView;
@@ -14,6 +14,7 @@ declare global {
 }
 
 export type DriveItem = {
+  id: string;
   name: string;
   mimeType: string;
   updatedAt: string;
@@ -83,6 +84,8 @@ export type RouteState = {
   formCode: string;
   path: string;
   folderId: string;
+  editFileId?: string;
+  editFileName?: string;
 };
 
 export type DriveAuthState = {
@@ -108,4 +111,13 @@ export type FormOption = {
 export type SharedUser = {
   name: string;
   email: string;
+};
+
+export type A01DocReadResponse = {
+  ok?: boolean;
+  error?: string;
+  fileId?: string;
+  fileName?: string;
+  form?: FormValues;
+  specMarkdown?: string;
 };

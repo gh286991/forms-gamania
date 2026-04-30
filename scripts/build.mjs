@@ -22,6 +22,18 @@ function listFolderItemsCli() {
   return AppScriptBundle.listFolderItemsCli.apply(this, arguments);
 }
 
+function listA01Files() {
+  return AppScriptBundle.listA01Files.apply(this, arguments);
+}
+
+function readA01DocFields() {
+  return AppScriptBundle.readA01DocFields.apply(this, arguments);
+}
+
+function updateA01Doc() {
+  return AppScriptBundle.updateA01Doc.apply(this, arguments);
+}
+
 function copyFormTemplate() {
   return AppScriptBundle.copyFormTemplate.apply(this, arguments);
 }

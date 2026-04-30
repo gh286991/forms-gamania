@@ -15,12 +15,14 @@ export function resolveTargetFolder(pathInput: string, folderIdInput: string): F
   return findFolderByPath(pathInput);
 }
 
-export function listCurrentLevelEntries(rootFolderId: string, maxFiles: number): DriveListResult {
+export function listCurrentLevelEntries(rootFolderId: string, maxFiles: number, ownedByMeOnly = false): DriveListResult {
   if (!rootFolderId) {
     throw new Error("找不到可用的資料夾 ID。");
   }
 
-  const query = `'${escapeQuery(rootFolderId)}' in parents and trashed = false`;
+  const query = ownedByMeOnly
+    ? `'${escapeQuery(rootFolderId)}' in parents and trashed = false and 'me' in owners`
+    : `'${escapeQuery(rootFolderId)}' in parents and trashed = false`;
   const files = listDriveFiles(query, maxFiles);
   const rows: DriveItemRow[] = files.map(toDriveItemRow);
 
@@ -221,6 +223,7 @@ function toDriveItemRow(file: DriveApiFile): DriveItemRow {
   const date = safeDate(file.modifiedDate);
 
   return {
+    id: file.id || "",
     name: file.title || "(未命名)",
     mimeType,
     updatedAt: formatTimestamp(date),
