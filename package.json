@@ -4,6 +4,9 @@
   "description": "Google Apps Script TypeScript project using clasp.",
   "private": true,
   "type": "module",
+  "bin": {
+    "call-form": "examples/call-form.mjs"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "node scripts/dev.mjs",
