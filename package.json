@@ -7,6 +7,9 @@
   "bin": {
     "call-form": "examples/call-form.mjs"
   },
+  "files": [
+    "examples"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "node scripts/dev.mjs",

@@ -2,17 +2,17 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const STANDARD_PAYLOAD_KEYS = new Set([
   "action", "form", "config", "template", "name", "path", "folderId"
 ]);
 
-const contentArg = process.argv[2];
-if (!contentArg) {
-  console.error("用法：node call-form.mjs <content.json>");
-  console.error("  必須指定 JSON 內容檔案路徑，例如：");
-  console.error("  node examples/call-form.mjs examples/a01-content.sample.json");
-  process.exit(1);
+const contentArg = process.argv[2] || path.join(__dirname, "a01-content.sample.json");
+if (!process.argv[2]) {
+  console.log("未指定內容檔案，使用內建範例：a01-content.sample.json");
 }
 
 const webappUrl = process.env.WEBAPP_URL || "https://script.google.com/a/macros/gamania.com/s/AKfycbwI20puawTw2AtyOOp65PudFrqfvHB2GVCeUuFW81LhVz4SMkWVd56RZYRi-EuyRFk/exec";
