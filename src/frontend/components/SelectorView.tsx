@@ -14,11 +14,13 @@ const FORM_OPTIONS: FormOption[] = [
 export function SelectorView({
   selectorError,
   onOpenForm,
-  onOpenDrive
+  onOpenDrive,
+  onOpenApiDoc
 }: {
   selectorError: string;
   onOpenForm: (code: string) => void;
   onOpenDrive: () => void;
+  onOpenApiDoc: () => void;
 }) {
   return (
     <section className="selector-view">
@@ -43,6 +45,9 @@ export function SelectorView({
       <div className="drive-quick">
         <button type="button" className="ghost-btn" onClick={onOpenDrive}>
           開啟 Drive 清單
+        </button>
+        <button type="button" className="ghost-btn" onClick={onOpenApiDoc}>
+          API 使用說明
         </button>
       </div>
     </section>

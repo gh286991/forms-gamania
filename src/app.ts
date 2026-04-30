@@ -330,6 +330,14 @@ export function doGet(e?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.Conte
       }, null, 2)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "api-doc") {
+      return renderReactHtmlPage("form-selector", "API 使用說明", {
+        defaultView: "selector",
+        defaultPath: pathInput,
+        defaultFolderId: folderIdInput
+      });
+    }
+
     const shouldRenderDrive = action === "drive" || !!e?.parameter?.path || !!folderIdInput;
     if (action === "form" || (!action && FORM_REGISTRY[formCodeParam])) {
       if (formCodeParam === "a01") {

@@ -23,6 +23,11 @@ function delay(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
+function isLocalDevRuntime(): boolean {
+  const host = window.location.hostname || "";
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 function patch(
   prev: CheckItem[],
   id: string,
@@ -43,6 +48,16 @@ export function StartupScreen({ onReady }: { onReady: (auth: DriveAuthState) => 
     setPhase("running");
 
     await delay(200);
+
+    // Local dev mode: bypass GAS/Drive checks so local preview is not blocked.
+    if (isLocalDevRuntime()) {
+      set("env", { status: "ok", message: "dev 模式：已略過 Apps Script 環境檢查。" });
+      set("drive", { status: "ok", message: "dev 模式：已略過 Google Drive 授權檢查。" });
+      setPhase("success");
+      await delay(350);
+      onReady({ checked: true, status: "ok", message: "dev 模式已自動通過初始化檢查" });
+      return;
+    }
 
     // Check 1: GAS environment
     set("env", { status: "checking" });

@@ -3,6 +3,7 @@ import type { AppContext, DriveAuthState, RouteState } from "./types";
 import { SelectorView } from "./components/SelectorView";
 import { DriveView } from "./components/DriveView";
 import { A01FormPage } from "./components/A01FormPage";
+import { ApiDocView } from "./components/ApiDocView";
 import { StartupScreen } from "./components/StartupScreen";
 import { callGas } from "./utils/callGas";
 import { parseAuthMessage, buildAuthErrorState, toPlainText } from "./utils/helpers";
@@ -14,6 +15,9 @@ function getInitialRoute(context: AppContext = {}): RouteState {
   const path = (params.get("path") || context.defaultPath || "").trim();
   const folderId = (params.get("folderId") || context.defaultFolderId || "").trim();
 
+  if (action === "api-doc") {
+    return { view: "api-doc", formCode: "", path, folderId };
+  }
   if ((action === "form" || form === "a01") && form) {
     if (form === "a01") return { view: "form", formCode: "a01", path, folderId };
     return { view: "selector", formCode: form, path, folderId };
@@ -38,6 +42,11 @@ function useSyncUrl(route: RouteState) {
       const url = new URL(window.location.href);
       if (route.view === "selector") {
         url.searchParams.delete("action");
+        url.searchParams.delete("form");
+        url.searchParams.delete("path");
+        url.searchParams.delete("folderId");
+      } else if (route.view === "api-doc") {
+        url.searchParams.set("action", "api-doc");
         url.searchParams.delete("form");
         url.searchParams.delete("path");
         url.searchParams.delete("folderId");
@@ -108,6 +117,11 @@ export function App() {
     setRoute({ ...route, view: "selector", formCode: "", path: route.path, folderId: route.folderId });
   }
 
+  function openApiDoc() {
+    setSelectorError("");
+    setRoute({ view: "api-doc", formCode: "", path: route.path, folderId: route.folderId });
+  }
+
   function openDrive() {
     setSelectorError("");
     setRoute({ view: "drive", formCode: "", path: route.path || "", folderId: route.folderId || "" });
@@ -130,6 +144,7 @@ export function App() {
           selectorError={selectorError}
           onOpenForm={openForm}
           onOpenDrive={openDrive}
+          onOpenApiDoc={openApiDoc}
         />
       ) : null}
       {route.view === "drive" ? (
@@ -138,6 +153,9 @@ export function App() {
           initialFolderId={route.folderId}
           onBack={openSelector}
         />
+      ) : null}
+      {route.view === "api-doc" ? (
+        <ApiDocView onBack={openSelector} />
       ) : null}
       {route.view === "form" && route.formCode === "a01" ? (
         <A01FormPage

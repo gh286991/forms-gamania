@@ -14,7 +14,7 @@ if (!contentArg) {
   process.exit(1);
 }
 
-const webappUrl = process.env.WEBAPP_URL || "https://script.google.com/macros/s/AKfycbx7Wv8uLqdJnkEID4o_Yd3qqnVnlugeDfSV9LiCm2JWV7AmX2NtF_eyERogYozF1QmI/exec";
+const webappUrl = process.env.WEBAPP_URL || "https://script.google.com/a/macros/gamania.com/s/AKfycbwI20puawTw2AtyOOp65PudFrqfvHB2GVCeUuFW81LhVz4SMkWVd56RZYRi-EuyRFk/exec";
 const payloadPath = path.resolve(process.cwd(), contentArg);
 const accessToken = process.env.GOOGLE_ACCESS_TOKEN || await loadClaspAccessToken();
 

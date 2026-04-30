@@ -1,4 +1,4 @@
-export type AppView = "selector" | "form" | "drive";
+export type AppView = "selector" | "form" | "drive" | "api-doc";
 
 export type AppContext = {
   defaultView?: AppView;

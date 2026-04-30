@@ -26,7 +26,8 @@ async function buildFrontend() {
     target: "es2020",
     platform: "browser",
     jsx: "automatic",
-    logLevel: "silent"
+    logLevel: "silent",
+    supported: { "template-literal": false }
   });
 
   const frontendJs = await readFile("dist/webapp/react-app.js", "utf8");

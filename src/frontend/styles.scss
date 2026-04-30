@@ -179,6 +179,9 @@ $success-line: #66bb6a;
 
   .drive-quick {
     margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   // ─── Back Button ───
@@ -392,4 +395,5 @@ $success-line: #66bb6a;
   .form-line {
     grid-template-columns: 1fr;
   }
+
 }

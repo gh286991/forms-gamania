@@ -70,7 +70,8 @@ await build({
   platform: "browser",
   jsx: "automatic",
   logLevel: "info",
-  minify: true
+  minify: true,
+  supported: { "template-literal": false }
 });
 
 await copyFile("appsscript.json", "dist/appsscript.json");
