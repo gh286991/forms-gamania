@@ -262,12 +262,39 @@ async function loadClaspAccessToken() {
     const config = JSON.parse(raw);
     const tokenData = config?.tokens?.default;
     if (!tokenData?.access_token) return "";
+
     const expiryDate = tokenData.expiry_date;
-    if (expiryDate && expiryDate - Date.now() < 60_000) {
-      console.error("Google access token 已過期或即將過期，請重新執行 `npx clasp login`。");
+    const isExpired = expiryDate && expiryDate - Date.now() < 60_000;
+    if (!isExpired) return tokenData.access_token;
+
+    if (!tokenData.refresh_token) {
+      console.error("Google access token 已過期，請重新執行 `npx clasp login`。");
       return "";
     }
-    return tokenData.access_token;
+
+    const clientId = config.oauth2ClientSettings?.clientId || "1072944905499-vm2v2i5dvn0a0d2o4ca36i1vge8cvbn.apps.googleusercontent.com";
+    const clientSecret = config.oauth2ClientSettings?.clientSecret || "v6V3fEivEGdWB2Y6tHAqmSbf";
+
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: tokenData.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+    const json = await res.json();
+    if (!json.access_token) {
+      console.error("Google token 刷新失敗，請重新執行 `npx clasp login`。");
+      return "";
+    }
+
+    tokenData.access_token = json.access_token;
+    tokenData.expiry_date = Date.now() + json.expires_in * 1000;
+    await fs.writeFile(claspPath, JSON.stringify(config, null, 2));
+    return json.access_token;
   } catch {
     return "";
   }
